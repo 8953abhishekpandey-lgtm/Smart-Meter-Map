@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MeterMap.Api/MeterMap.Api.csproj" />
+    <Project Path="src/MeterMap.Core/MeterMap.Core.csproj" />
+    <Project Path="src/MeterMap.Data/MeterMap.Data.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MeterMap.Tests/MeterMap.Tests.csproj" />
+  </Folder>
+</Solution>
