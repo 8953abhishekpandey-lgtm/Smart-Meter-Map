@@ -61,7 +61,7 @@ app.MapGet("/api/meter-status", async (
         var useToday = today ?? true;
         var daysClamped = Math.Clamp(days ?? 7, 1, 400);
 
-        // Validation (purane Program.cs jaisi)
+        // Validation 
         if (from.HasValue && to.HasValue)
         {
             if (from.Value.Date > to.Value.Date)
