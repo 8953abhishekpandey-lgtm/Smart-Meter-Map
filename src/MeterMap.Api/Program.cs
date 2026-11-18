@@ -7,7 +7,7 @@ builder.Services.Configure<DatabaseOptions>(
 
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddSingleton<MeterRepository>();
-builder.Services.AddSingleton<MeterStatusService>();   // NEW: asli logic yahi chalata hai
+builder.Services.AddSingleton<MeterStatusService>();   // logic
 
 var app = builder.Build();
 
@@ -45,8 +45,7 @@ app.MapGet("/api/gps-meters", async (
 });
 
 // Endpoint used by wwwroot/index.html
-// Query: days | from & to (yyyy-MM-dd) | today=true/false | stale=hours
-// Interval ab query se nahi aata: MeterStatusService har meter ka interval gaps se infer karta hai.
+
 app.MapGet("/api/meter-status", async (
     MeterStatusService svc,
     DateTime? from,
@@ -77,8 +76,7 @@ app.MapGet("/api/meter-status", async (
         app.Logger.LogInformation("meter-status took {Ms} ms ({Count} meters)",
             sw.ElapsedMilliseconds, result.Total);
 
-        // Response purane shape jaisa rakha, taaki index.html na toote.
-        // 'from'/'to' ab service se nahi aate, isliye refTime se nikaale gaye hain.
+      
         return Results.Ok(new
         {
             refTime = result.RefTime,
@@ -88,7 +86,7 @@ app.MapGet("/api/meter-status", async (
             to = to ?? result.RefTime,
             warnings = result.Warnings ?? new List<string>(),
 
-            // Naye fields (extra, purane code ko affect nahi karte)
+          
             total = result.Total,
             communicating = result.Communicating,
             buildings = result.Buildings,

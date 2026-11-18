@@ -1,426 +1,890 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
 <meta charset="utf-8" />
+
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+
 <title>Meter Communication Map</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+
+<link rel="stylesheet" href="https://js.arcgis.com/5.2/esri/themes/dark/main.css" />
 <style>
+  /* Keep ArcGIS popup and navigation controls consistent with the dashboard's dark palette. */
+  .esri-view, .esri-view-surface { background: #08090c; }
+  .esri-popup__main-container, .esri-popup__header, .esri-popup__content { background: #0f1116; color: #f1f2f5; }
+  .esri-popup__header-title, .esri-popup__content { color: #f1f2f5; }
+  .esri-popup__button { color: #f1f2f5; }
+  .esri-widget, .esri-widget--button { background: #0f1116; color: #f1f2f5; }
+  .esri-widget--button:hover { background: #252832; color: #ff3b3b; }
+  .esri-view .esri-view-surface--inset-outline:focus::after { outline-color: #ff3b3b; }
+</style>
+
+<style>
+
   /* Only the colour palette changed: charcoal-black panels, red alert accent, green = good */
+
   :root { --bg:#08090c; --side:#0f1116; --card:linear-gradient(180deg,rgba(24,26,33,.94),rgba(13,14,19,.94)); --tile:rgba(255,255,255,.045);
+
           --line:rgba(255,255,255,.08); --txt:#f1f2f5; --dim:#8b909c; --g:#2fd46b; --a:#f59e0b; --r:#ff3b3b; --inset:#0a0b0f; }
+
   * { box-sizing:border-box; }
+
   html, body { margin:0; height:100%; background:var(--bg); color:var(--txt); font:14px "Source Sans Pro", system-ui, "Segoe UI", sans-serif; }
-  #map { position:fixed; top:0; right:0; bottom:0; left:300px; transition:left .25s ease; }
+
+  #map { position:fixed; min-height:240px; top:0; right:0; bottom:0; left:300px; transition:left .25s ease; }
+
   #side { position:fixed; top:0; left:0; bottom:0; width:300px; background:var(--side); border-right:1px solid var(--line); padding:24px 28px 40px; overflow-y:auto; z-index:5; transition:transform .25s ease; }
+
   #panel { position:fixed; top:48px; right:16px; bottom:16px; width:420px; overflow-y:auto; z-index:5; padding-right:4px; }
+
   #panel::-webkit-scrollbar, #side::-webkit-scrollbar { width:6px; }
+
   #panel::-webkit-scrollbar-thumb, #side::-webkit-scrollbar-thumb { background:#3a3d46; border-radius:3px; }
+
   h2 { font-size:1.6rem; margin:0 0 20px; font-weight:700; } h4 { margin:22px 0 8px; font-size:1.3rem; }
+
   .lbl { font-size:.85rem; margin:16px 0 6px; display:block; }
+
   select, input[type=text], input[type=number], input[type=date] { width:100%; background:var(--inset); color:var(--txt); border:1px solid var(--line);
+
         border-radius:8px; padding:10px 12px; font:inherit; color-scheme:dark; }
+
   select:focus, input:focus { outline:1px solid var(--r); }
+
   .radio { display:flex; flex-wrap:wrap; gap:4px 16px; } .radio.col { flex-direction:column; gap:6px; }
+
   .radio label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+
   .radio input { accent-color:var(--r); width:16px; height:16px; margin:0; }
+
   .btn { width:100%; margin-top:14px; padding:10px; border-radius:8px; background:transparent; color:var(--txt);
+
          border:1px solid rgba(255,255,255,.16); font:inherit; cursor:pointer; }
+
   .btn:hover { border-color:var(--r); color:var(--r); box-shadow:0 0 12px rgba(255,59,59,.25); }
+
   details { margin-top:14px; border:1px solid rgba(255,255,255,.16); border-radius:8px; padding:10px 12px; }
+
   details summary { cursor:pointer; } details pre { white-space:pre-wrap; word-break:break-all; font-size:.72rem; color:var(--dim); }
+
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;
+
           backdrop-filter:blur(8px); box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 6px 24px rgba(0,0,0,.55); }
+
   .sec { font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:10px; }
+
   .meta { font-size:.72rem; color:var(--dim); line-height:1.5; margin-top:4px; }
+
   .note { background:rgba(255,59,59,.12); border:1px solid rgba(255,59,59,.35); border-radius:8px; padding:14px 16px; margin-top:12px; font-size:.95rem; line-height:1.5; }
+
   .ring { width:120px; height:120px; border-radius:50%; margin:6px auto; position:relative; box-shadow:0 0 24px rgba(255,59,59,.15); }
+
   .ring::after { content:""; position:absolute; inset:11px; border-radius:50%; background:#0d0e13; }
+
   .ring div { position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+
   .ring b { font-size:1.7rem; } .ring small { font-size:.5rem; letter-spacing:.1em; color:var(--dim); }
+
   .ring.sm { width:60px; height:60px; margin:0 auto 6px; box-shadow:none; } .ring.sm::after { inset:6px; } .ring.sm b { font-size:.8rem; }
+
   .kpis { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
   .kpi { background:var(--tile); border:1px solid var(--line); border-radius:8px; padding:10px 12px; } .kpi b { font-size:1.4rem; display:block; }
+
   .kpi small { font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+
   .tiles { display:flex; gap:4px; margin-bottom:10px; }
+
   .tile { border-radius:4px; padding:8px 6px; min-width:0; color:#fff; } .tile b { display:block; font-size:.95rem; } .tile small { font-size:.62rem; }
+
   .row { display:flex; align-items:center; gap:8px; font-size:.78rem; margin:6px 0; } .row i { width:8px; height:8px; border-radius:50%; flex:none; }
+
   .row span:last-child { margin-left:auto; color:var(--dim); }
+
   .nsps { display:flex; justify-content:space-around; text-align:center; font-size:.72rem; } .nsps small { color:var(--dim); display:block; font-size:.62rem; }
+
   table { width:100%; border-collapse:separate; border-spacing:3px; font-size:.68rem; } th { color:var(--dim); font-weight:600; padding:2px; }
+
   td.n { font-weight:700; text-align:left; font-size:.72rem; } td.c { text-align:center; padding:9px 2px; border-radius:4px; font-weight:700; color:#fff; background:var(--tile); }
+
   .bars { display:flex; align-items:flex-end; justify-content:space-around; height:130px; }
+
   .bars div { text-align:center; font-size:.62rem; color:var(--dim); width:18%; } .bars i { display:block; margin:3px 0; border-radius:3px; min-height:3px; }
+
   .cause { display:flex; gap:8px; } .cause div { flex:1; background:var(--tile); border-radius:8px; padding:10px 12px; border-left:3px solid var(--r); cursor:help; }
+
   .cause b { font-size:1.2rem; display:block; } .cause small { display:block; font-size:.62rem; color:var(--dim); }
+
   .waffle { display:grid; grid-template-columns:repeat(20,1fr); gap:3px; } .waffle i { aspect-ratio:1; border-radius:2px; }
+
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:8px; font-size:.68rem; color:var(--dim); }
+
   .legend i { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; }
+
   .foot { font-size:.68rem; color:var(--dim); margin-top:8px; }
+
   #err { color:#fca5a5; font-size:.8rem; margin-top:10px; word-break:break-word; }
 
+
+
   /* sidebar collapse arrow */
+
   #sideToggle { position:fixed; top:14px; left:300px; width:26px; height:46px; z-index:6; padding:0;
+
         display:flex; align-items:center; justify-content:center; cursor:pointer;
+
         background:var(--side); color:var(--txt); border:1px solid var(--line); border-left:none; border-radius:0 8px 8px 0;
+
         box-shadow:4px 2px 12px rgba(0,0,0,.5); transition:left .25s ease, color .15s, border-color .15s; }
+
   #sideToggle:hover { color:var(--r); border-color:var(--r); }
+
   #sideToggle svg { width:16px; height:16px; transition:transform .25s ease; }
+
   body.side-collapsed #side { transform:translateX(-100%); }
+
   body.side-collapsed #map { left:0; }
+
   body.side-collapsed #sideToggle { left:0; }
+
   body.side-collapsed #sideToggle svg { transform:rotate(180deg); }
 
+
+
   /* Insights on/off switch */
+
   .switch { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; margin:0 0 8px;
+
         padding:10px 12px; background:var(--inset); border:1px solid var(--line); border-radius:8px; font-size:.95rem; }
+
   .switch input { position:absolute; opacity:0; pointer-events:none; }
+
   .switch .track { width:38px; height:22px; border-radius:11px; background:#3a3d46; position:relative; flex:none; transition:background .2s; }
+
   .switch .track::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .2s; }
+
   .switch input:checked + .track { background:var(--r); }
+
   .switch input:checked + .track::after { transform:translateX(16px); }
+
   .switch input:focus-visible + .track { outline:2px solid #fff; outline-offset:2px; }
+
   body.hide-panel #panel { display:none; }
 
+
+
   @media (max-width:900px){ #side{position:static;width:100%} #map{position:static;height:60vh} #panel{position:static;width:100%}
+
     #sideToggle, body.side-collapsed #sideToggle { left:8px; top:8px; border:1px solid var(--line); border-radius:8px; }
+
     body.side-collapsed #side { display:none; transform:none; } }
+
 </style>
+
 </head>
+
 <body>
+
 <div id="map"></div>
 
+
+
 <button id="sideToggle" type="button" title="Hide sidebar" aria-label="Toggle sidebar" aria-expanded="true">
+
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+
 </button>
 
+
+
 <aside id="side">
+
   <h2>📡 Controls</h2>
 
+
+
   <label class="switch" for="togInsights">
+
     <span>Show Insights panel</span>
+
     <input type="checkbox" id="togInsights" checked />
+
     <span class="track"></span>
+
   </label>
 
+
+
   <span class="lbl" style="margin-top:14px">Data range</span>
+
   <div class="radio col" id="rangeMode">
+
     <label><input type="radio" name="rm" value="quick" checked> Quick range</label>
+
     <label><input type="radio" name="rm" value="custom"> Custom dates</label>
+
   </div>
+
+
 
   <div id="quickBox">
+
     <span class="lbl">Last</span>
+
     <select id="days">
+
       <option value="1">1 day</option><option value="7" selected>7 days</option>
+
       <option value="30">1 month</option><option value="90">3 months</option><option value="365">1 year</option>
+
     </select>
+
   </div>
+
   <div id="customBox" hidden>
+
     <span class="lbl">From</span><input type="date" id="from" />
+
     <span class="lbl">To</span><input type="date" id="to" />
+
   </div>
+
+
 
   <span class="lbl">Status measured against</span>
+
   <div class="radio" id="basisBox">
+
     <label><input type="radio" name="basis" value="true" checked> Today</label>
+
     <label><input type="radio" name="basis" value="false"> Latest data time</label>
+
   </div>
+
+
 
   <button class="btn" id="refresh">🔄 Refresh data</button>
+
   <details id="dbg"><summary>🛠 Debug meter</summary>
+
     <input type="text" id="dbgId" placeholder="Meter ID" style="margin-top:8px" /><pre id="dbgOut"></pre>
+
   </details>
 
+
+
   <span class="lbl">when to consider Not communicating (hours)</span>
+
   <input id="stale" type="number" min="1" value="24" />
 
+
+
   <h4>Filters</h4>
+
   <span class="lbl" style="margin-top:6px">Location / Area</span><select id="fArea"></select>
+
   <span class="lbl">Manufacturer</span><select id="fMfr"></select>
+
   <span class="lbl">NSP</span><select id="fNsp"></select>
+
   <span class="lbl">Building</span><select id="fBld"></select>
+
   <span class="lbl">Status</span>
+
   <div class="radio col">
+
     <label><input type="radio" name="st" value="All" checked> All</label>
+
     <label><input type="radio" name="st" value="Communicating"> Communicating</label>
+
     <label><input type="radio" name="st" value="Not communicating"> Not communicating</label>
+
   </div>
+
   <span class="lbl">Meter ID search</span><input type="text" id="search" />
 
+
+
   <h4>Export</h4>
+
   <button class="btn" id="expMeters" style="margin-top:0">Meter list (CSV)</button>
+
   <button class="btn" id="expBld">Building summary (CSV)</button>
+
   <div id="err"></div>
+
 </aside>
 
+
+
 <section id="panel">
+
   <div class="card" id="head"></div>
+
   <div class="card" id="ringCard"></div>
+
   <div class="card"><div class="kpis" id="kpis"></div></div>
+
   <div class="card"><div class="sec">Location-wise</div><label class="lbl" style="margin:0 0 6px">Select location</label><select id="pArea"></select></div>
+
   <div class="card"><div class="sec">Manufacturer-wise</div><div id="mfr"></div></div>
+
   <div class="card"><div class="sec">NSP-wise</div><div class="nsps" id="nsp"></div></div>
+
   <div class="card"><div class="sec">Manufacturer × NSP</div><div id="matrix"></div></div>
+
   <div class="card"><div class="sec">Comm quality</div><div class="bars" id="hist"></div></div>
+
   <div class="card"><div class="sec">Why silent? (probable cause)</div><div class="cause" id="cause"></div>
+
     <div class="foot">Probable cause from data patterns, not confirmed. Hover a tile for the rule.</div></div>
+
   <div class="card"><div class="sec">Silent duration</div><div class="waffle" id="waffle"></div><div class="legend" id="wlegend"></div></div>
+
 </section>
 
+
+
 <script>
+
 /* ---------- Sidebar pop in / pop out + Insights on / off ---------- */
+
 (function(){
+
   var body=document.body, side=document.getElementById('sideToggle'), tog=document.getElementById('togInsights');
+
   function get(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+
   function set(k,v){try{localStorage.setItem(k,v);}catch(e){}}
-  function resizeMap(){ setTimeout(function(){ try{ if(typeof map!=='undefined') map.resize(); }catch(e){} },280); }
+
+  function resizeMap(){ setTimeout(function(){ try{ if(window.meterMapView && window.meterMapView.extent) window.meterMapView.goTo(window.meterMapView.extent,{animate:false}).catch(function(){}); }catch(e){} },280); }
+
   function setSide(open,save){
+
     body.classList.toggle('side-collapsed',!open);
+
     side.title=open?'Hide sidebar':'Show sidebar';
+
     side.setAttribute('aria-expanded',String(open));
+
     if(save!==false)set('mm_side',open?'1':'0');
+
     resizeMap();
+
   }
+
   function setPanel(on,save){
+
     body.classList.toggle('hide-panel',!on);
+
     tog.checked=on;
+
     if(save!==false)set('mm_panel',on?'1':'0');
+
   }
+
   side.addEventListener('click',function(){ setSide(body.classList.contains('side-collapsed')); });
+
   tog.addEventListener('change',function(){ setPanel(tog.checked); });
+
   if(get('mm_side')==='0')setSide(false,false);
+
   if(get('mm_panel')==='0')setPanel(false,false);
+
 })();
+
 </script>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/deck.gl@^9.1.0/dist.min.js"></script>
-<script>
+
+
+<!-- ArcGIS Maps SDK for JavaScript. The legacy dark-gray basemap is used below. -->
+<script type="module" src="https://js.arcgis.com/5.2/"></script>
+
+<script type="module">
+
 /* Expected /api/meter-status response:
+
    { refTime, statusRef, meters:[{ meterId, buildingId, buildingName, area, flatNo, lat, lon, status,
+
      commPct, intervalMinutes, hoursSilent, lastCommTime, reason, manufacturer, nsp }] }
+
    Query: days | from & to (YYYY-MM-DD) | today=true/false | stale=hours
+
    reason: e.g. "Sudden stop" | "Silent before range" */
+
 const GREEN=[47,212,107,190], RED=[255,59,59,215], AMBER=[245,158,11,215];
+
 const ZOOM_SWITCH=15, REFRESH_MS=300000, $=id=>document.getElementById(id);
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 const fmtHours=h=>h>=9999?'No data in selected range':h.toFixed(1)+' h';
+
 const fmtTime=t=>!t?'Never':new Date(t).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
 const col=r=>r>=80?'var(--g)':r>=50?'var(--a)':'var(--r)';
+
 const rad=n=>document.querySelector(`input[name=${n}]:checked`).value;
+
 const OK='Communicating';
 
-/* ---------- Map ---------- */
-const map=new maplibregl.Map({container:'map',style:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',center:[78.5,22.5],zoom:4});
-map.addControl(new maplibregl.NavigationControl(),'bottom-left');
-const overlay=new deck.MapboxOverlay({interleaved:false,layers:[],getTooltip});
-map.addControl(overlay);
 
-function getTooltip({object,layer}){
-  if(!object||!layer)return null; let L;
-  if(layer.id==='meters'){const ok=object.status===OK;
-    L=[`<b>Meter ID: ${esc(object.meterId)}</b>`,ok?'🟢 Communicating':'🔴 Not communicating',
-       `${esc(object.manufacturer)} · ${esc(object.nsp)}`,`Location: ${esc(object.buildingName)}, ${esc(object.area)}`,
-       ok?`Quality: ${Math.round(object.commPct)}% · ${object.intervalMinutes} min interval`:`Reason: ${esc(object.reason)} · Silent: ${fmtHours(object.hoursSilent)}`,
-       `Flat: ${esc(object.flatNo)} · Last comm: ${fmtTime(object.lastCommTime)}`];
-  } else L=[`<b>Building: ${esc(object.name)}</b>`,`Location: ${esc(object.area)}`,`Meters: ${object.total} · 🟢 ${object.good} (${object.rate.toFixed(1)}%)`,
-            `🔴 Not communicating: ${object.total-object.good}`,`Max silent: ${fmtHours(object.maxSilent)}`];
-  return {html:L.join('<br/>'),style:{backgroundColor:'rgba(12,13,17,.97)',color:'#f1f2f5',fontSize:'13px',padding:'10px 14px',borderRadius:'10px',border:'1px solid rgba(255,59,59,.45)',maxWidth:'340px',lineHeight:'1.55'}};
+
+/* ---------- ArcGIS map ---------- */
+// ArcGIS Maps SDK 5.2 is loaded from the official CDN. The dark-gray 2D basemap
+// is a legacy basemap ID and does not require an embedded API key in this setup.
+const [EsriMap, MapView, GraphicsLayer, Graphic, Point, Extent, Zoom] = await $arcgis.import([
+  "@arcgis/core/Map.js",
+  "@arcgis/core/views/MapView.js",
+  "@arcgis/core/layers/GraphicsLayer.js",
+  "@arcgis/core/Graphic.js",
+  "@arcgis/core/geometry/Point.js",
+  "@arcgis/core/geometry/Extent.js",
+  "@arcgis/core/widgets/Zoom.js"
+]);
+
+//arcgis
+const ARCGIS_API_KEY = "";
+if (ARCGIS_API_KEY) {
+  const esriConfig = await $arcgis.import("@arcgis/core/config.js");
+  esriConfig.apiKey = ARCGIS_API_KEY;
 }
+
+const buildingLayer = new GraphicsLayer({ title: "Building clusters", listMode: "show" });
+const meterLayer = new GraphicsLayer({ title: "Individual meters", listMode: "show" });
+const map = new EsriMap({ basemap: "dark-gray", layers: [buildingLayer, meterLayer] });
+const view = new MapView({
+  container: "map",
+  map,
+  center: [78.5, 22.5],
+  zoom: 4,
+  constraints: { minZoom: 3 },
+  popup: { dockEnabled: true, dockOptions: { breakpoint: false, position: "bottom-left" } }
+});
+window.meterMapView = view;
+view.ui.add(new Zoom({ view }), "bottom-left");
+
+function syncMapLayers(){
+  const z = Number(view.zoom || 0);
+  buildingLayer.visible = z < ZOOM_SWITCH;
+  meterLayer.visible = z >= ZOOM_SWITCH;
+}
+view.watch("zoom", syncMapLayers);
+view.when(syncMapLayers).catch(err => console.error("ArcGIS view initialization failed:", err));
+
+function pointGraphic(item, layerType){
+  const isBuilding = layerType === "building";
+  const color = isBuilding
+    ? (item.rate >= 80 ? [47,212,107,210] : item.rate >= 50 ? [245,158,11,220] : [255,59,59,225])
+    : (item.status === OK ? [47,212,107,210] : [255,59,59,225]);
+  const size = isBuilding ? Math.min(42, 14 + 3.2 * Math.sqrt(item.total || 1)) : 9 + (Number(item.commPct) || 0) / 100 * 7;
+  const geometry = new Point({ longitude: Number(item.lon), latitude: Number(item.lat) });
+  const title = isBuilding ? `Building: ${esc(item.name || "Unknown")}` : `Meter ID: ${esc(item.meterId || "Unknown")}`;
+  const content = isBuilding
+    ? `<div style="line-height:1.7;color:#f1f2f5"><div>Location: ${esc(item.area || "Unknown")}</div><div>Meters: ${item.total} · 🟢 ${item.good} (${Number(item.rate || 0).toFixed(1)}%)</div><div>🔴 Not communicating: ${(item.total || 0) - (item.good || 0)}</div><div>Max silent: ${fmtHours(Number(item.maxSilent) || 0)}</div></div>`
+    : `<div style="line-height:1.7;color:#f1f2f5"><div>${item.status === OK ? "🟢 Communicating" : "🔴 Not communicating"}</div><div>${esc(item.manufacturer || "Unknown")} · ${esc(item.nsp || "Unknown")}</div><div>Location: ${esc(item.buildingName || "Unknown")}, ${esc(item.area || "Unknown")}</div><div>${item.status === OK ? `Quality: ${Math.round(Number(item.commPct) || 0)}% · ${esc(item.intervalMinutes)} min interval` : `Reason: ${esc(item.reason || "Unknown")} · Silent: ${fmtHours(Number(item.hoursSilent) || 0)}`}</div><div>Flat: ${esc(item.flatNo || "- ")} · Last comm: ${fmtTime(item.lastCommTime)}</div></div>`;
+  return new Graphic({
+    geometry,
+    attributes: { ...item, __layerType: layerType },
+    symbol: {
+      type: "simple-marker",
+      style: "circle",
+      color,
+      size,
+      outline: { color: [255,255,255,205], width: isBuilding ? 1.4 : 0.9 }
+    },
+    popupTemplate: { title, content }
+  });
+}
+
+view.on("click", async event => {
+  try {
+    const hit = await view.hitTest(event, { include: [buildingLayer, meterLayer] });
+    const result = hit.results.find(r => r.graphic && (r.graphic.layer === buildingLayer || r.graphic.layer === meterLayer));
+    if (!result) return;
+    const graphic = result.graphic;
+    if (graphic.layer === buildingLayer) {
+      view.goTo({ center: graphic.geometry, zoom: ZOOM_SWITCH + 1 }, { duration: 450 }).catch(() => {});
+      return;
+    }
+    const m = graphic.attributes;
+    $("dbgId").value = m.meterId || "";
+    $("dbgOut").textContent = JSON.stringify(m, null, 2);
+    $("dbg").open = true;
+    view.popup.open({ features: [graphic], location: event.mapPoint });
+  } catch (err) {
+    console.warn("Map hit-test failed:", err);
+  }
+});
 
 /* ---------- Data ---------- */
+
 let data=null, firstFit=true;
+
 let lastReq={};
+
 const isoDay=d=>d.toISOString().slice(0,10);
+
 const fmtDay=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+
 function setDateLimits(){
+
   const nd=String(data?.newest||data?.dataMax||data?.refTime||'').slice(0,10)||isoDay(new Date());
+
   $('from').max=nd; $('to').max=nd;
+
   if(!$('to').value){ $('to').value=nd; const d=new Date(nd+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()-6); $('from').value=isoDay(d); }
+
 }
+
 function params(){
+
   const q=new URLSearchParams({today:rad('basis'),stale:$('stale').value||24});
+
   if(rad('rm')==='custom'){
+
     setDateLimits();
+
     let f=$('from').value,t=$('to').value;
+
     if(f>t)[f,t]=[t,f];
+
     $('from').value=f; $('to').value=t; q.set('from',f); q.set('to',t);
+
   } else q.set('days',$('days').value);
+
   return q;
+
 }
+
 let loadSeq=0;
+
 async function load(refit=false){
+
   const q=params(); lastReq=Object.fromEntries(q);
+
   const seq=++loadSeq; $('err').style.color='#94a3b8'; $('err').textContent='Loading… '+q; $('panel').style.opacity=.5;
+
   try{
+
     const res=await fetch('/api/meter-status?'+q,{cache:'no-store'});
+
     if(!res.ok)throw new Error((await res.text()||res.statusText).slice(0,400));
+
     const d=await res.json(); if(seq!==loadSeq)return;
+
     data=d; setDateLimits(); $('err').style.color='#86efac'; $('err').textContent='Loaded: '+q; fillFilters(); if(refit===true)firstFit=true; render();
+
   }catch(e){
+
     if(seq!==loadSeq)return;
+
     $('head').innerHTML=`<h2 style="font-size:1.2rem;margin:0">Insights</h2><div class="note" style="background:#7f1d1d">${esc(e.message)}</div>`;
+
     $('err').style.color='#fca5a5'; $('err').textContent='Data load failed: '+q;
+
   }finally{ if(seq===loadSeq)$('panel').style.opacity=1; }
+
 }
+
+
 
 const FIL={area:'fArea',mfr:'fMfr',nsp:'fNsp',bld:'fBld'}, KEY={area:'area',mfr:'manufacturer',nsp:'nsp',bld:'buildingName'};
+
 const ALLTXT={area:'All locations',mfr:'All manufacturers',nsp:'All NSPs',bld:'All'};
+
 function fillFilters(){
+
   for(const k in FIL){
+
     const sel=$(FIL[k]), cur=sel.value||'';
+
     const vals=[...new Set(data.meters.map(m=>m[KEY[k]]).filter(Boolean))].sort();
+
     sel.innerHTML=`<option value="">${ALLTXT[k]}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+
     sel.value=vals.includes(cur)?cur:'';
+
   }
+
   $('pArea').innerHTML=$('fArea').innerHTML; $('pArea').value=$('fArea').value;
+
 }
+
 function filtered(skip){
+
   const st=rad('st'), s=$('search').value.trim().toLowerCase();
+
   return data.meters.filter(m=>(st==='All'||m.status===st)&&(!s||m.meterId.toLowerCase().includes(s))&&
+
     Object.keys(FIL).every(k=>k===skip||!$(FIL[k]).value||m[KEY[k]]===$(FIL[k]).value));
+
 }
+
 function buildingsOf(list){
+
   const g=new Map();
+
   for(const m of list){let b=g.get(m.buildingId);
+
     if(!b){b={id:m.buildingId,name:m.buildingName,area:m.area,lat:m.origLat??m.lat,lon:m.origLon??m.lon,total:0,good:0,maxSilent:0};g.set(m.buildingId,b);}
+
     b.total++; if(m.status===OK)b.good++; b.maxSilent=Math.max(b.maxSilent,m.hoursSilent);}
+
   return [...g.values()].map(b=>({...b,rate:b.good/b.total*100}));
+
 }
+
 function fit(list){
-  if(!list.length)return;
-  const lo=list.map(m=>m.lon),la=list.map(m=>m.lat),b=[[Math.min(...lo),Math.min(...la)],[Math.max(...lo),Math.max(...la)]];
+  const valid = list.filter(m => Number.isFinite(Number(m.lon)) && Number.isFinite(Number(m.lat)) &&
+    Number(m.lon) >= -180 && Number(m.lon) <= 180 && Number(m.lat) >= -90 && Number(m.lat) <= 90);
+  if(!valid.length) return;
+  const xs=valid.map(m=>Number(m.lon)), ys=valid.map(m=>Number(m.lat));
+  const xmin=Math.min(...xs), xmax=Math.max(...xs), ymin=Math.min(...ys), ymax=Math.max(...ys);
   const rightPad=document.body.classList.contains('hide-panel')?80:480;
-  if(b[0][0]===b[1][0]&&b[0][1]===b[1][1])map.jumpTo({center:b[0],zoom:16});
-  else map.fitBounds(b,{padding:{top:80,bottom:80,left:80,right:rightPad},duration:0});
+  view.when().then(()=>{
+    view.padding={top:80,bottom:80,left:80,right:rightPad};
+    if(xmin===xmax && ymin===ymax){
+      return view.goTo({ center:[xmin,ymin], zoom:16 }, { animate:false });
+    }
+    const extent=new Extent({ xmin, ymin, xmax, ymax, spatialReference:{wkid:4326} });
+    return view.goTo(extent.expand(1.12), { animate:false });
+  }).catch(()=>{});
 }
+
 const pct=(a,b)=>b?Math.round(a/b*100):0;
+
 const group=(list,k)=>{const g={};list.forEach(m=>{(g[m[k]||'Unknown']??=[]).push(m);});return g;};
+
 const rate=a=>a.filter(m=>m.status===OK).length/a.length*100;
 
+
+
 /* ---------- Render ---------- */
+
 function render(){
+
   const list=filtered(), blds=buildingsOf(list);
 
+
+
   const baseL=filtered('area'), byArea=group(baseL,'area'), curArea=$('fArea').value;
+
   const ico=x=>x>=80?'🟢':x>=50?'🟡':'🔴';
+
   const allR=baseL.length?rate(baseL):0;
+
   $('pArea').innerHTML=`<option value="">${baseL.length?ico(allR):'⚪'} All locations · ${baseL.length.toLocaleString()} meters · ${Math.round(allR)}% communicating</option>`+
+
     Object.keys(byArea).sort((a,b)=>rate(byArea[a])-rate(byArea[b])).map(a=>{const x=rate(byArea[a]);
+
       return `<option value="${esc(a)}">${ico(x)} ${esc(a)} · ${byArea[a].length.toLocaleString()} meters · ${Math.round(x)}% communicating</option>`;}).join('');
+
   $('pArea').value=curArea;
-  overlay.setProps({layers:[
-    new deck.ScatterplotLayer({id:'buildings',data:blds,pickable:true,maxZoom:ZOOM_SWITCH,getPosition:d=>[d.lon,d.lat],radiusUnits:'pixels',
-      getRadius:d=>7+1.6*Math.sqrt(d.total),getFillColor:d=>d.rate>=80?GREEN:d.rate>=50?AMBER:RED,stroked:true,getLineColor:[255,255,255,200],
-      lineWidthMinPixels:1,autoHighlight:true,highlightColor:[255,255,255,120],
-      onClick: info => { if(info && info.object) map.flyTo({ center:[info.object.lon, info.object.lat], zoom: ZOOM_SWITCH + 1 }); }
-    }),
-    new deck.ScatterplotLayer({id:'meters',data:list,pickable:true,minZoom:ZOOM_SWITCH,getPosition:d=>[d.lon,d.lat],radiusUnits:'pixels',
-      getRadius:d=>5+d.commPct/100*6,getFillColor:d=>d.status===OK?GREEN:RED,stroked:true,getLineColor:[255,255,255,120],
-      lineWidthMinPixels:.5,autoHighlight:true,highlightColor:[255,255,255,120],
-      onClick: info => {
-        if (!info || !info.object) return;
-        const m = info.object;
-        $('dbgId').value = m.meterId;
-        $('dbgOut').textContent = JSON.stringify(m, null, 2);
-        $('dbg').open = true;
-      }
-    })]});
+
+  // Building-level aggregation is retained as the low-zoom cluster layer;
+  // individual meter graphics are shown at zoom 15 and above.
+  buildingLayer.removeAll();
+  meterLayer.removeAll();
+  const validBuildings=blds.filter(b=>Number.isFinite(Number(b.lon))&&Number.isFinite(Number(b.lat)));
+  const validMeters=list.filter(m=>Number.isFinite(Number(m.lon))&&Number.isFinite(Number(m.lat)));
+  if(validBuildings.length) buildingLayer.addMany(validBuildings.map(b=>pointGraphic(b,"building")));
+  if(validMeters.length) meterLayer.addMany(validMeters.map(m=>pointGraphic(m,"meter")));
+  syncMapLayers();
+
+
 
   const total=list.length, good=list.filter(m=>m.status===OK).length, bad=total-good, r=total?good/total*100:0;
+
   const avgQ=total?Math.round(list.reduce((s,m)=>s+m.commPct,0)/total):0;
+
   const days=rad('rm')==='custom'?'custom range':`last ${$('days').value} days`;
 
+
+
   // Header + notices
+
   const stale=+$('stale').value||24;
+
   let notes=(data.warnings||[]).map(w=>`<div class="note">${esc(w)}</div>`).join('');
+
   const maxTime = data.dataMax || data.refTime;
+
   const gapH=(new Date(data.statusRef)-new Date(maxTime))/36e5;
+
   if(gapH>48)notes=`<div class="note">No data has arrived since ${fmtTime(maxTime)}. Status is measured at ${fmtTime(data.statusRef)}, so meters without recent data show as Not communicating.</div>`+notes;
+
   const custom=!!(lastReq.from&&lastReq.to);
+
   const selTxt=custom?`${fmtDay(lastReq.from)} → ${fmtDay(lastReq.to)}`:`last ${lastReq.days||$('days').value} days`;
+
   const ivMix={}; data.meters.forEach(m=>ivMix[m.intervalMinutes]=(ivMix[m.intervalMinutes]||0)+1);
+
   const mixTxt=Object.keys(ivMix).sort((a,b)=>a-b).map(k=>`${k}-min: ${ivMix[k].toLocaleString()} meters`).join(' · ');
+
   if(custom&&new Date(data.refTime)<new Date(lastReq.to+'T00:00:00')-864e5)
+
     notes=`<div class="note">Selected range is ${selTxt}, but data in it exists only up to ${fmtTime(data.refTime)}. These numbers cover only that period.</div>`+notes;
+
   $('head').innerHTML=`<h2 style="font-size:1.2rem;margin:0">Insights</h2>
+
     <div class="meta">Updated ${fmtTime(new Date())} · Red = ${stale}+ silent hrs</div>
+
     <div class="meta" style="margin-top:10px"><b style="color:#e2e8f0">Selected range:</b> ${selTxt}</div>
+
     <div class="meta"><b style="color:#e2e8f0">Data used up to:</b> ${fmtTime(data.refTime)}</div>
+
     <div class="meta"><b style="color:#e2e8f0">Status measured at:</b> ${fmtTime(data.statusRef)}</div>
+
     <div class="meta">${mixTxt}</div>${notes}`;
 
+
+
   // Ring + KPIs
+
   const bg=!total?'rgba(255,255,255,.12)':bad===0?'var(--g)':good===0?'var(--r)':`conic-gradient(var(--g) 0 ${r}%,var(--r) ${r}% 100%)`;
+
   $('ringCard').innerHTML=`<div class="ring" style="background:${bg}"><div><b>${total?Math.round(r)+'%':'-'}</b><small>COMMUNICATING</small></div></div>`;
+
   $('kpis').innerHTML=[[good.toLocaleString(),'Communicating','var(--g)'],[bad.toLocaleString(),'Not communicating','var(--r)'],
+
     [total.toLocaleString(),`Meters · ${blds.length} bldg`,''],[avgQ+'%','Avg quality','']]
+
     .map(([v,l,c])=>`<div class="kpi"><b style="color:${c}">${v}</b><small>${l}</small></div>`).join('');
 
+
+
   // Manufacturer-wise
+
   const gm=group(list,'manufacturer'), mk=Object.keys(gm).sort();
+
   $('mfr').innerHTML=`<div class="tiles">${mk.map(k=>`<div class="tile" style="flex:${gm[k].length};background:${col(rate(gm[k]))}"><b>${Math.round(rate(gm[k]))}%</b><small>${esc(k)}</small></div>`).join('')}</div>`+
+
     mk.map(k=>`<div class="row"><i style="background:${col(rate(gm[k]))}"></i><span>${esc(k)}</span><span>${gm[k].length} meters</span></div>`).join('')+
+
     `<div class="foot">Width = meters count · color = communication rate</div>`;
 
+
+
   // NSP-wise
+
   const gn=group(list,'nsp'), nk=Object.keys(gn).sort();
+
   $('nsp').innerHTML=nk.map(k=>{const x=rate(gn[k]);
+
     return `<div><div class="ring sm" style="background:conic-gradient(${col(x)} 0 ${x}%,rgba(255,255,255,.12) ${x}% 100%)"><div><b>${Math.round(x)}%</b></div></div>${esc(k)}<small>${gn[k].length} meters</small></div>`;}).join('');
 
+
+
   // Matrix
+
   $('matrix').innerHTML=`<table><tr><th></th>${nk.map(n=>`<th>${esc(n)}</th>`).join('')}</tr>`+
+
     mk.map(a=>`<tr><td class="n">${esc(a)}</td>${nk.map(n=>{const c=gm[a].filter(m=>(m.nsp||'Unknown')===n);
+
       return c.length?`<td class="c" style="background:${col(rate(c))}">${Math.round(rate(c))}%</td>`:`<td class="c" style="color:var(--dim)">-</td>`;}).join('')}</tr>`).join('')+
+
     `</table><div class="foot">Communication % · row = manufacturer, column = NSP</div>`;
 
+
+
   // Histogram
+
   const bk=[0,0,0,0,0]; list.forEach(m=>bk[Math.min(4,Math.floor(m.commPct/20))]++);
+
   const mx=Math.max(1,...bk), bc=['var(--r)','var(--a)','var(--a)','var(--a)','var(--g)'];
+
   $('hist').innerHTML=bk.map((n,i)=>`<div>${n}<i style="height:${n/mx*90}px;background:${bc[i]}"></i>${i*20}-${i*20+20}</div>`).join('');
 
+
+
   // Silent causes
+
   const silent=list.filter(m=>m.status!==OK), gc=group(silent,'reason');
+
   const rules={'Mass outage':'Many meters went silent in the same 3-hour window (area or head-end issue).','Power loss':'Voltage ~0 in the last reading.','Overheating':'Terminal temperature too high in the last reading.','Reading fault':'Rows keep arriving but all readings are blank.','Intermittent signal':'Many intervals were missing even before the meter went silent.','Never communicated':'No interval records for this meter in the whole table.','Silent before range':'No rows in the selected range; last communication was earlier.','Sudden stop':'Was working normally, then stopped; cause not visible in the data.'};
+
   const RC={'Mass outage':'#a855f7','Power loss':'#f59e0b','Overheating':'#f97316','Reading fault':'#06b6d4','Intermittent signal':'#3b82f6','Never communicated':'#64748b','Sudden stop':'#ff3b3b','Silent before range':'#78716c'};
+
   $('cause').style.flexWrap='wrap';
+
   $('cause').innerHTML=Object.keys(gc).map(k=>`<div style="border-left-color:${RC[k]||'#94a3b8'};min-width:30%" title="${esc(rules[k]||'')}"><b>${gc[k].length}</b>${esc(k)}<small>${pct(gc[k].length,silent.length)}% of silent</small></div>`).join('')||'<span class="foot">No silent meters 🎉</span>';
 
+
+
   // Silent duration waffle (100 cells)
+
   const B=[['<48 h',h=>h<48,'#fca5a5'],['48–72 h',h=>h<72,'#f87171'],['3–7 days',h=>h<168,'#ef4444'],['7+ days',()=>true,'#b91c1c']];
+
   const cnt=B.map(()=>0); silent.forEach(m=>{cnt[B.findIndex(b=>b[1](m.hoursSilent))]++;});
+
   let cells=''; B.forEach((b,i)=>{const n=silent.length?Math.round(cnt[i]/silent.length*100):0;cells+=`<i style="background:${b[2]}" title="${b[0]}"></i>`.repeat(n);});
+
   $('waffle').innerHTML=cells||'<span class="foot">Nothing silent</span>';
+
   $('wlegend').innerHTML=B.map((b,i)=>`<span><i style="background:${b[2]}"></i>${b[0]} (${cnt[i]})</span>`).join('');
 
+
+
   if(firstFit){fit(list);firstFit=false;}
+
 }
+
+
 
 /* ---------- Export ---------- */
+
 function csv(name,rows){
+
   if(!rows.length)return;
+
   const h=Object.keys(rows[0]), t=[h.join(','),...rows.map(r=>h.map(k=>`"${String(r[k]??'').replace(/"/g,'""')}"`).join(','))].join('\n');
+
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'})); a.download=name; a.click();
+
 }
+
 $('expMeters').onclick=()=>data&&csv('meters.csv',filtered());
+
 $('expBld').onclick=()=>data&&csv('buildings.csv',buildingsOf(filtered()).map(b=>({...b,rate:b.rate.toFixed(1)})));
 
+
+
 /* ---------- Events ---------- */
+
 document.querySelectorAll('input[name=rm]').forEach(e=>e.onchange=()=>{
+
   const c=rad('rm')==='custom'; $('quickBox').hidden=c; $('customBox').hidden=!c;
+
   if(c&&data)setDateLimits(); load(true);});
+
 ['days','stale','from','to'].forEach(id=>$(id).addEventListener('change',()=>load(true)));
+
 document.querySelectorAll('input[name=basis]').forEach(e=>e.onchange=()=>load(true));
+
 Object.values(FIL).forEach(id=>$(id).addEventListener('change',()=>{if(id==='fArea')$('pArea').value=$(id).value;data&&render();}));
+
 $('pArea').addEventListener('change',()=>{$('fArea').value=$('pArea').value;data&&render();});
+
 document.querySelectorAll('input[name=st]').forEach(e=>e.onchange=()=>data&&render());
+
 $('search').addEventListener('input',()=>data&&render());
+
 $('dbgId').addEventListener('input',()=>{const m=data?.meters.find(x=>x.meterId.toLowerCase()===$('dbgId').value.trim().toLowerCase());
+
   $('dbgOut').textContent=m?JSON.stringify(m,null,2):'';});
+
 $('refresh').onclick=()=>load(true);
+
 setInterval(load,REFRESH_MS);
+
 load();
+
 </script>
+
 </body>
+
 </html>
