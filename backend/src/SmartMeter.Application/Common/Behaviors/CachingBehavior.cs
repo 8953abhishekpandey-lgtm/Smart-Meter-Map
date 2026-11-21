@@ -18,6 +18,10 @@ public sealed class CachingBehavior<TRequest, TResponse>(HybridCache cache, IAna
             Expiration = duration,
             LocalCacheExpiration = duration < TimeSpan.FromMinutes(2) ? duration : TimeSpan.FromMinutes(2),
         };
-        return await cache.GetOrCreateAsync(key, async _ => await next(), options, cancellationToken: cancellationToken);
+        // The factory is SHARED by every concurrent caller of the same key (stampede protection), so it must run with
+        // HybridCache's shared token (cancelled only when *all* callers have gone), never with the first caller's
+        // request token - otherwise one user panning away would fail the identical in-flight request of everyone else.
+        return await cache.GetOrCreateAsync(key, next, static async (next, shared) => await next(shared), options,
+            cancellationToken: cancellationToken);
     }
 }
