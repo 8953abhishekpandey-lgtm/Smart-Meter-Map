@@ -154,7 +154,7 @@ cd ../backend
 dotnet user-secrets --project src/SmartMeter.Api set "ConnectionStrings:SmartMeterDb" \
   "Server=localhost,1433;Database=SmartMeterDb;User Id=smartmeter_app;Password=<app password>;TrustServerCertificate=True"
 dotnet run --project src/SmartMeter.Api --launch-profile http
-dotnet test                                   # 53 unit tests
+dotnet test                                   # 61 unit tests
 
 # 3. Web  (http://localhost:4200, proxies /api and /hubs to :5080)
 cd ../frontend && npm ci && npm start
@@ -399,8 +399,9 @@ Errors are RFC 7807 problem details with a `traceId`.
 
 ## 11. Performance, scale & load testing
 
-See [`docs/performance.md`](docs/performance.md) for measured numbers (300K and 2M meter fleets), the k6 load-test
-results and sizing guidance for 15M+ meters. Run the load test yourself:
+See [`docs/performance.md`](docs/performance.md) for measured numbers (300K and 2M meter fleets on a 4 vCPU box with
+native SQL Server 2025: cached responses 2-13 ms, cold map/KPI queries < 250 ms, 0 errors under 30-50 concurrent
+users) and sizing guidance for 15M+ meters. Run the load test yourself:
 
 ```bash
 # k6 is a single native binary (https://k6.io) - no container needed
