@@ -1,0 +1,12 @@
+{
+  "apiBaseUrl": "",
+  "arcgisApiKey": "",
+  "arcgisAssetsPath": "/assets/arcgis",
+  "defaultCenter": [
+    78.9,
+    21.5
+  ],
+  "defaultZoom": 5,
+  "locale": "en-IN",
+  "arcgisFontsUrl": ""
+}

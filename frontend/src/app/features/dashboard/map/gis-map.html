@@ -1,0 +1,47 @@
+<div class="map-wrap">
+  <div #mapHost class="map" aria-label="Smart meter communication map"></div>
+
+  <div class="overlay top-left draw-tools" role="toolbar" aria-label="Selection tools">
+    <button type="button" (click)="draw('lasso')" [class.on]="drawing()" title="Free-hand lasso selection">Lasso</button>
+    <button type="button" (click)="draw('polygon')" title="Click to add vertices, double-click to finish">Polygon</button>
+    <button type="button" (click)="draw('rectangle')" title="Drag a rectangle">Box</button>
+    <button type="button" (click)="draw('clear')" title="Clear selection">Clear</button>
+    <button type="button" (click)="home()" title="Zoom to the whole fleet">Fleet</button>
+  </div>
+
+  <div class="overlay top-right basemaps" role="radiogroup" aria-label="Basemap">
+    @for (b of basemaps; track b.key) {
+      <button type="button" role="radio" [attr.aria-checked]="basemapKey() === b.key" [class.on]="basemapKey() === b.key"
+              (click)="setBasemap(b.key)">{{ b.label }}</button>
+    }
+  </div>
+
+  <div class="overlay bottom-left legend">
+    <div class="legend-title">Failure rate on the selected day</div>
+    @for (b of bands; track b.band) {
+      <div class="legend-row"><span class="dot" [style.background]="b.color"></span>{{ b.label }}</div>
+    }
+    <div class="legend-note">Bubble size = meters · click to drill down</div>
+  </div>
+
+  <div class="overlay bottom-right status">
+    @if (loading()) { <span class="spinner" aria-hidden="true"></span> Updating… }
+    @else if (info(); as i) {
+      {{ i.mode === 'grid' ? 'Clustered · level ' + i.level : 'Buildings' }} · {{ fmt(i.count) }} bubbles · zoom {{ i.zoom }}
+      @if (i.truncated) { <b> · largest shown</b> }
+    }
+  </div>
+
+  @if (tooltip(); as t) {
+    <div class="tooltip" [style.left.px]="t.x + 14" [style.top.px]="t.y + 14" role="tooltip">
+      <div class="tt-title">{{ t.b.name ?? (t.b.kind === 'cell' ? 'Area cluster' : t.b.buildingKey) }}</div>
+      @if (t.b.address) { <div class="tt-sub">{{ t.b.address }}</div> }
+      <div class="tt-grid">
+        <span>Meters</span><b>{{ fmt(t.b.meters) }}</b>
+        <span>Communicating</span><b>{{ fmt(t.b.communicating) }} / {{ fmt(t.b.expected) }}</b>
+        <span>Failing</span><b>{{ fmt(t.b.failing) }} ({{ t.b.failurePct.toFixed(1) }}%)</b>
+      </div>
+      <div class="tt-hint">{{ t.b.kind === 'cell' && !t.b.buildingKey ? 'Click to zoom in' : 'Click for building details' }}</div>
+    </div>
+  }
+</div>

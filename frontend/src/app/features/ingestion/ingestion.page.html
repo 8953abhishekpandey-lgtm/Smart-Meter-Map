@@ -1,0 +1,56 @@
+<div class="wrap">
+  <div class="title-row">
+    <h1>Data ingestion</h1>
+    <span class="sub">Analytics window {{ meta.window()?.start }} → {{ meta.window()?.end }} · generation v{{ meta.dataVersion() }}</span>
+    <button type="button" class="secondary" (click)="refresh()" [disabled]="refreshing()">Refresh analytics now</button>
+  </div>
+
+  <div class="drops">
+    @for (k of kinds; track k.kind) {
+      <section class="drop" [class.over]="dragOver() === k.kind" (dragover)="$event.preventDefault(); dragOver.set(k.kind)"
+               (dragleave)="dragOver.set(null)" (drop)="onDrop($event, k.kind)">
+        <h2>{{ k.title }}</h2>
+        <p>{{ k.text }}</p>
+        <p class="cols"><b>Columns:</b> {{ k.columns }} <span class="muted">(common aliases are recognised)</span></p>
+        <label class="pick">
+          <input type="file" accept=".csv,.txt,.xlsx,.xlsb,.xls" (change)="onPick($event, k.kind)" />
+          Drop an Excel / CSV file here or <u>browse</u>
+        </label>
+        <button type="button" class="link" (click)="downloadTemplate(k.kind)">Download template</button>
+      </section>
+    }
+  </div>
+
+  @for (u of uploads(); track u.fileName) {
+    <div class="upload">
+      <span>Uploading <b>{{ u.fileName }}</b> ({{ size(u.size) }})</span>
+      <span class="progress"><span [style.width.%]="(u.sent / u.size) * 100"></span></span>
+      <span class="num">{{ ((u.sent / u.size) * 100).toFixed(0) }}%</span>
+    </div>
+  }
+
+  <h2 class="jobs-title">Recent jobs</h2>
+  <table class="grid">
+    <thead>
+      <tr><th>File</th><th>Type</th><th>Status</th><th>Progress</th><th class="num">Read</th><th class="num">Valid</th><th class="num">Rejected</th>
+          <th class="num">Inserted</th><th class="num">Updated</th><th>Started</th><th>Duration</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (j of jobs(); track j.jobId) {
+        <tr>
+          <td><b>{{ j.fileName }}</b><div class="msg">{{ j.message }}</div></td>
+          <td>{{ j.kind === 'cis' ? 'CIS master' : 'MDM logs' }}</td>
+          <td><span class="status" [class]="j.status">{{ j.status }}</span></td>
+          <td><span class="progress"><span [style.width.%]="j.progressPct"></span></span> {{ j.progressPct.toFixed(0) }}%</td>
+          <td class="num">{{ fmt(j.rowsRead) }}</td><td class="num">{{ fmt(j.rowsValid) }}</td>
+          <td class="num" [class.bad]="j.rowsRejected > 0">{{ fmt(j.rowsRejected) }}</td>
+          <td class="num">{{ fmt(j.rowsInserted) }}</td><td class="num">{{ fmt(j.rowsUpdated) }}</td>
+          <td>{{ time(j.createdAt) }}</td><td>{{ duration(j) }}</td>
+          <td>@if (j.rowsRejected > 0) { <button type="button" class="link" (click)="downloadErrors(j)">Error report</button> }</td>
+        </tr>
+      } @empty {
+        <tr><td colspan="12" class="muted">No ingestion jobs yet.</td></tr>
+      }
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,55 @@
+<div class="page">
+  <sm-filter-bar />
+  <sm-kpi-bar [kpis]="kpiValue()" [loading]="kpis.isLoading()" />
+
+  <div class="workspace" [class.tools-closed]="!toolsOpen()">
+    <div class="map-area">
+      <sm-gis-map [query]="store.query()" [dataVersion]="meta.dataVersion()" (buildingSelected)="onBuilding($event)" (clusterSelected)="onCluster($event)" />
+
+      @if (drawer(); as d) {
+        <aside class="drawer" role="dialog" [attr.aria-label]="d.kind === 'building' ? 'Building details' : 'Meter details'">
+          <div class="drawer-bar">
+            <span class="crumbs">
+              @if (d.kind === 'building') { Building drill-down } @else { Meter card }
+            </span>
+            @if (d.kind === 'building') {
+              <a class="link" [routerLink]="['/explore/buildings', buildingKeyOf(d)]">Open full page ↗</a>
+            } @else {
+              <a class="link" [routerLink]="['/explore/meters', meterIdOf(d)]">Open full page ↗</a>
+            }
+            <button type="button" class="close" (click)="closeDrawer()" aria-label="Close">✕</button>
+          </div>
+          <div class="drawer-body">
+            @if (d.kind === 'building') {
+              <sm-building-detail [buildingKey]="buildingKeyOf(d)" (meterSelected)="openMeter($event)" />
+            } @else {
+              <sm-meter-detail [meterId]="meterIdOf(d)" (openBuilding)="openBuilding($event.key, $event.lon, $event.lat)"
+                               (locate)="commands.flyTo($event.lon, $event.lat, 19)" />
+            }
+          </div>
+        </aside>
+      }
+    </div>
+
+    <aside class="tools" aria-label="Analytical tools">
+      <button type="button" class="tools-toggle" (click)="toolsOpen.set(!toolsOpen())" [attr.aria-expanded]="toolsOpen()"
+              [title]="toolsOpen() ? 'Hide tools' : 'Show tools'">{{ toolsOpen() ? '›' : '‹' }}</button>
+      @if (toolsOpen()) {
+        <nav class="tool-tabs" role="tablist">
+          <button type="button" role="tab" [class.on]="toolTab() === 'trend'" (click)="toolTab.set('trend')">Trend</button>
+          <button type="button" role="tab" [class.on]="toolTab() === 'clusters'" (click)="toolTab.set('clusters')">Clusters</button>
+          <button type="button" role="tab" [class.on]="toolTab() === 'sim'" (click)="toolTab.set('sim')">SIM switch</button>
+          <button type="button" role="tab" [class.on]="toolTab() === 'lasso'" (click)="toolTab.set('lasso')">Lasso</button>
+        </nav>
+        <div class="tool-body">
+          @switch (toolTab()) {
+            @case ('trend') { <sm-trend-panel /> }
+            @case ('clusters') { <sm-clusters-panel /> }
+            @case ('sim') { <sm-sim-switch-panel (buildingSelected)="focusBuilding($event)" /> }
+            @case ('lasso') { <sm-lasso-panel /> }
+          }
+        </div>
+      }
+    </aside>
+  </div>
+</div>

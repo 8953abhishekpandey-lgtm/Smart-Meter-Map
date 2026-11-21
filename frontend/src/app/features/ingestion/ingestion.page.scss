@@ -1,0 +1,26 @@
+:host { display: block; }
+.wrap { padding: 18px 24px 40px; max-width: 1400px; margin: 0 auto; }
+.title-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; h1 { margin: 0; font-size: 22px; } .sub { color: var(--ink-muted); font-size: 13px; flex: 1; } }
+.drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.drop { background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; padding: 16px;
+  h2 { margin: 0 0 4px; font-size: 16px; } p { margin: 4px 0; font-size: 13px; color: var(--ink-secondary); }
+  &.over { border-color: var(--accent); background: rgba(42, 120, 214, .05); } }
+.cols { font-size: 12px !important; }
+.muted { color: var(--ink-muted); }
+.pick { display: block; margin: 12px 0 6px; padding: 18px; border-radius: 8px; background: var(--plane); text-align: center; cursor: pointer; font-size: 14px;
+  input { display: none; } }
+button.link { border: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; padding: 0; }
+button.secondary { height: 32px; border: 1px solid var(--border); border-radius: 6px; padding: 0 12px; background: var(--surface); cursor: pointer; font: inherit; }
+.upload { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: 13px; .num { width: 40px; text-align: right; } }
+.progress { display: inline-block; width: 120px; height: 8px; border-radius: 4px; background: var(--hairline); overflow: hidden; vertical-align: middle;
+  span { display: block; height: 100%; background: #2a78d6; border-radius: 4px; transition: width .3s; } }
+.jobs-title { font-size: 16px; margin: 22px 0 8px; }
+.grid { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px;
+  th { text-align: left; font-size: 12px; color: var(--ink-muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--border); background: var(--plane); white-space: nowrap; }
+  td { padding: 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; } .bad { color: #a32828; font-weight: 700; } }
+.msg { font-size: 12px; color: var(--ink-muted); margin-top: 2px; max-width: 360px; }
+.status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--chip); text-transform: capitalize;
+  &.completed { background: #e3f4e3; color: #006300; } &.failed { background: #fbe4e4; color: #a32828; }
+  &.parsing, &.merging, &.queued, &.uploading { background: #e2eefb; color: #1c5cab; } }
+@media (max-width: 900px) { .drops { grid-template-columns: 1fr; } }

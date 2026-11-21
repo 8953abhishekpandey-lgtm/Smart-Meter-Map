@@ -64,11 +64,18 @@ internal sealed class FindSimSwitchHandler(IAnalyticsStateProvider state, IAnaly
         var day = DaySelection.From(snap.Window, q.Date, q.Metric);
         var rows = await repo.GetSimSwitchAsync(q.Filter, day, q.MinStrongSuccessPct / 100.0, q.MinWeakFailurePct / 100.0,
             q.MinMetersPerNsp, (q.Page - 1) * q.PageSize, q.PageSize, ct);
-        var items = rows.Select(r => new SimSwitchDto(
-            r.BuildingKey, r.Name, r.Address, snap.ZoneName(r.ZoneId), r.Lon, r.Lat,
-            r.StrongNspId, snap.NspName(r.StrongNspId), r.StrongMeters, Pct.Of(r.StrongCommunicating, r.StrongExpected),
-            r.WeakNspId, snap.NspName(r.WeakNspId), r.WeakMeters, Math.Max(0, r.WeakExpected - r.WeakCommunicating),
-            Pct.Of(r.WeakExpected - r.WeakCommunicating, r.WeakExpected))).ToList();
+        var items = rows.Select(r =>
+        {
+            var weakFailurePct = Pct.Of(r.WeakExpected - r.WeakCommunicating, r.WeakExpected);
+            // Window basis aggregates meter-days: express "failing" as meters (average daily failing SIMs).
+            var weakFailing = q.Metric == MetricMode.Window
+                ? (long)Math.Round(r.WeakMeters * weakFailurePct / 100.0)
+                : Math.Max(0, r.WeakExpected - r.WeakCommunicating);
+            return new SimSwitchDto(
+                r.BuildingKey, r.Name, r.Address, snap.ZoneName(r.ZoneId), r.Lon, r.Lat,
+                r.StrongNspId, snap.NspName(r.StrongNspId), r.StrongMeters, Pct.Of(r.StrongCommunicating, r.StrongExpected),
+                r.WeakNspId, snap.NspName(r.WeakNspId), r.WeakMeters, weakFailing, weakFailurePct);
+        }).ToList();
         return new PagedResult<SimSwitchDto>(items, q.Page, q.PageSize, rows.Count > 0 ? rows[0].TotalCount : 0);
     }
 }

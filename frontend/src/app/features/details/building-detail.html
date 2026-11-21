@@ -1,0 +1,148 @@
+@if (detail.isLoading() && !d()) {
+  <div class="skeleton">Loading building…</div>
+} @else if (detail.error()) {
+  <div class="empty">Building not found or not available in the current analytics generation.</div>
+}
+@if (d(); as b) {
+  <header class="head">
+    <div>
+      <h2>{{ b.name }}</h2>
+      <div class="sub">{{ b.address ?? 'No address on file' }}</div>
+      <div class="tags">
+        <span class="tag">{{ b.zone }}</span>
+        <span class="tag">{{ b.isVirtual ? 'Virtual building (grid cell)' : 'Building ID ' + b.buildingId }}</span>
+        <span class="tag">Day {{ longDate(b.date) }}</span>
+      </div>
+    </div>
+    <sm-band [band]="b.band" [failurePct]="b.failurePct" />
+  </header>
+
+  <section class="tiles">
+    <div class="tile"><span class="k">Total meters</span><span class="v">{{ fmt(b.totalMeters) }}</span><span class="s">{{ fmt(b.expected) }} expected on the day</span></div>
+    <div class="tile"><span class="k">Communicating</span><span class="v">{{ fmt(b.success) }}</span><span class="s">{{ pct(b.successPct) }} success</span></div>
+    <div class="tile"><span class="k">Failing</span><span class="v">{{ fmt(b.failure) }}</span><span class="s">{{ pct(b.failurePct) }} failure</span></div>
+    <div class="tile"><span class="k">30-day average</span><span class="v">{{ pct(b.windowSuccessPct) }}</span><span class="s">daily success</span></div>
+  </section>
+  <div class="health-row">
+    <span><b>{{ fmt(b.health.allDay) }}</b> all-day</span>
+    <span><b>{{ fmt(b.health.last7Days) }}</b> active last 7 days</span>
+    <span><b>{{ fmt(b.health.intermittent) }}</b> intermittent</span>
+    <span><b>{{ fmt(b.health.dead) }}</b> dead</span>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    @for (t of [['overview','Overview'],['trend','30-day trend'],['consumption','Consumption'],['meters','Meters']]; track t[0]) {
+      <button type="button" role="tab" [class.on]="tab() === t[0]" [attr.aria-selected]="tab() === t[0]" (click)="setTab($any(t[0]))">{{ t[1] }}</button>
+    }
+  </nav>
+
+  @switch (tab()) {
+    @case ('overview') {
+      <h3>By network service provider</h3>
+      <table class="grid">
+        <thead><tr><th>NSP</th><th class="num">Meters</th><th class="num">Comm / expected</th><th>Failure on day</th><th class="num">30-day avg</th></tr></thead>
+        <tbody>
+          @for (n of b.byNsp; track n.id) {
+            <tr>
+              <td>{{ n.name }}</td><td class="num">{{ fmt(n.meters) }}</td><td class="num">{{ fmt(n.success) }} / {{ fmt(n.expected) }}</td>
+              <td><span class="bar"><span [style.width.%]="barWidth(n)" [style.background]="barColor(n)"></span></span>{{ pct(n.failurePct) }}</td>
+              <td class="num">{{ pct(n.windowSuccessPct) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <h3>By manufacturer</h3>
+      <table class="grid">
+        <thead><tr><th>Manufacturer</th><th class="num">Meters</th><th class="num">Comm / expected</th><th>Failure on day</th><th class="num">30-day avg</th></tr></thead>
+        <tbody>
+          @for (n of b.byManufacturer; track n.id) {
+            <tr>
+              <td>{{ n.name }}</td><td class="num">{{ fmt(n.meters) }}</td><td class="num">{{ fmt(n.success) }} / {{ fmt(n.expected) }}</td>
+              <td><span class="bar"><span [style.width.%]="barWidth(n)" [style.background]="barColor(n)"></span></span>{{ pct(n.failurePct) }}</td>
+              <td class="num">{{ pct(n.windowSuccessPct) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    @case ('trend') {
+      <h3>Daily communication success</h3>
+      <p class="hint">Hover for exact counts · click a day to make it the selected date everywhere.</p>
+      <sm-echart [options]="trendOptions()" [height]="240" ariaLabel="Daily communication success percentage" (pointClick)="pickDay($event.dataIndex)" />
+      <table class="grid compact">
+        <thead><tr><th>Date</th><th class="num">Communicating</th><th class="num">Expected</th><th class="num">Success</th></tr></thead>
+        <tbody>
+          @for (p of b.trend; track p.date) {
+            <tr [class.sel]="p.date === b.date"><td>{{ shortDate(p.date) }}</td><td class="num">{{ fmt(p.communicating) }}</td><td class="num">{{ fmt(p.expected) }}</td><td class="num">{{ pct(p.successPct, 2) }}</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+    @case ('consumption') {
+      @if (consumption.isLoading()) { <div class="skeleton">Requesting consumption from MDM…</div> }
+      @if (consumption.hasValue(); as _) {
+        @let c = consumption.value();
+        @if (!c.available) {
+          <div class="warn">{{ c.message }}</div>
+        } @else {
+          <section class="tiles">
+            <div class="tile"><span class="k">Total ({{ c.days }} days)</span><span class="v">{{ fmt(Math.round(c.totalKwh)) }}</span><span class="s">kWh, building</span></div>
+            <div class="tile"><span class="k">Building daily avg</span><span class="v">{{ fmt(Math.round(c.buildingDailyAvgKwh)) }}</span><span class="s">kWh / day</span></div>
+            <div class="tile"><span class="k">Per-meter daily avg</span><span class="v">{{ c.perMeterDailyAvgKwh.toFixed(2) }}</span><span class="s">kWh / meter / day</span></div>
+            <div class="tile"><span class="k">Meters with reads</span><span class="v">{{ fmt(c.metersWithData) }}</span><span class="s">of {{ fmt(c.communicatingMeters) }} communicating</span></div>
+          </section>
+          <p class="hint">Source: {{ c.source === 'mock' ? 'simulated MDM (mock mode)' : 'live MDM API' }}{{ c.partial ? ' · partial: ' + c.message : '' }} · per-meter average is computed over communicating meters.</p>
+          @if (consumptionChart(); as opt) { <sm-echart [options]="opt" [height]="200" ariaLabel="Daily building consumption in kWh" /> }
+          <h3>Top consumers</h3>
+          <table class="grid compact">
+            <thead><tr><th>Meter</th><th class="num">Total kWh</th><th class="num">kWh / day</th></tr></thead>
+            <tbody>
+              @for (m of c.topConsumers; track m.meterId) {
+                <tr class="click" (click)="meterSelected.emit(m.meterId)"><td>{{ m.meterId }}</td><td class="num">{{ fmt(m.totalKwh) }}</td><td class="num">{{ m.dailyAvgKwh.toFixed(2) }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
+      }
+    }
+    @case ('meters') {
+      <div class="toolbar">
+        <input type="search" placeholder="Meter ID or address…" [value]="search()" (input)="onSearch($any($event.target).value)" aria-label="Search meters" />
+        <select [value]="status()" (change)="onStatus($any($event.target).value)" aria-label="Status">
+          <option value="all">All meters</option><option value="communicating">Communicating on day</option><option value="failing">Failing on day</option>
+          <option value="allDay">All-day comm</option><option value="intermittent">Intermittent</option><option value="dead">Dead</option>
+        </select>
+        <select [value]="sort()" (change)="onSort($any($event.target).value)" aria-label="Sort by">
+          <option value="meterId">Meter ID</option><option value="commDays">Comm days</option><option value="lastComm">Last comm</option>
+          <option value="nsp">NSP</option><option value="manufacturer">Manufacturer</option><option value="installation">Installed</option>
+        </select>
+        <button type="button" class="icon" (click)="toggleDir()" [attr.aria-label]="desc() ? 'Descending' : 'Ascending'">{{ desc() ? '↓' : '↑' }}</button>
+        <button type="button" class="primary" (click)="export()" [disabled]="exporting()">{{ exporting() ? 'Exporting…' : 'Export CSV' }}</button>
+      </div>
+      @if (meters.hasValue(); as _) {
+        @let pg = meters.value();
+        <div class="scroll-x"><table class="grid compact">
+          <thead><tr><th>Meter</th><th>NSP</th><th>Make</th><th>Health</th><th class="num">Comm days</th><th>Last comm</th><th>30 days</th></tr></thead>
+          <tbody>
+            @for (m of pg.items; track m.meterId) {
+              <tr class="click" (click)="meterSelected.emit(m.meterId)">
+                <td><b>{{ m.meterId }}</b>
+                  @if (m.communicatedOnDay === false) { <span class="flag fail" title="Failed on the selected day">✕</span> }
+                  @if (m.communicatedOnDay === true) { <span class="flag ok" title="Communicated on the selected day">✓</span> }
+                </td>
+                <td>{{ m.nsp }}</td><td>{{ m.manufacturer }}</td><td>{{ healthLabels[m.health] }}</td>
+                <td class="num">{{ m.commDays }} / {{ m.eligDays }}</td><td>{{ shortDate(m.lastCommDate) }}</td>
+                <td><sm-timeline-strip [timeline]="m.timeline" [windowStart]="meta.window()?.start ?? b.trend[0].date" [selectedDate]="b.date" /></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="empty">No meters match.</td></tr>
+            }
+          </tbody>
+        </table></div>
+        <sm-pager [page]="pg.page" [pageSize]="pg.pageSize" [total]="pg.total" (pageChange)="page.set($event)" />
+      } @else if (meters.isLoading()) {
+        <div class="skeleton">Loading meters…</div>
+      }
+    }
+  }
+}

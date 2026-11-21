@@ -1,0 +1,39 @@
+@if (meter.isLoading() && !m()) { <div class="skeleton">Loading meter…</div> }
+@else if (meter.error()) { <div class="empty">Meter not found.</div> }
+@if (m(); as x) {
+  <header class="head">
+    <div>
+      <h2>{{ x.meterId }}</h2>
+      <div class="sub">{{ x.address ?? 'No address on file' }}</div>
+      <div class="tags">
+        <span class="tag">{{ x.zone }}</span>
+        <button type="button" class="tag link" (click)="openBuilding.emit({ key: x.buildingKey, lon: x.lon, lat: x.lat })">{{ x.buildingName ?? x.buildingKey }} →</button>
+        @if (x.lon != null && x.lat != null) { <button type="button" class="tag link" (click)="locate.emit({ lon: x.lon!, lat: x.lat! })">Show on map</button> }
+      </div>
+    </div>
+  </header>
+  <section class="tiles">
+    <div class="tile"><span class="k">30-day health</span><span class="v small">{{ x.health ? healthLabels[x.health] : '—' }}</span><span class="s">{{ x.commDays }} of {{ x.eligDays }} expected days</span></div>
+    <div class="tile"><span class="k">Comm rate</span><span class="v">{{ pct(x.commPct) }}</span><span class="s">last comm {{ shortDate(x.lastCommDate) }}</span></div>
+  </section>
+  <dl class="attrs">
+    <dt>NSP</dt><dd>{{ x.nsp }}</dd>
+    <dt>Manufacturer</dt><dd>{{ x.manufacturer }}</dd>
+    <dt>Installed</dt><dd>{{ longDate(x.installationDate) }}</dd>
+    <dt>Building</dt><dd>{{ x.buildingId ?? 'none (grid cell ' + x.buildingKey + ')' }}</dd>
+    <dt>Transformer (DT)</dt><dd>{{ x.dtId ?? '—' }}</dd>
+    <dt>Coordinates</dt><dd>{{ x.lat != null ? x.lat!.toFixed(6) + ', ' + x.lon!.toFixed(6) : 'unknown' }}</dd>
+  </dl>
+  <h3>Daily communication ({{ counts().ok }} ok · {{ counts().failed }} failed · {{ counts().missing }} no record)</h3>
+  <div class="timeline" role="list">
+    @for (d of x.timeline; track d.date) {
+      <div class="day" [class]="d.status" role="listitem" [title]="longDate(d.date) + ': ' + d.status">
+        <span class="dnum">{{ shortDate(d.date).slice(0, 2) }}</span>
+      </div>
+    }
+  </div>
+  <div class="tl-legend">
+    <span><i class="sw communicating"></i>Communicated</span><span><i class="sw failed"></i>Failed</span>
+    <span><i class="sw no-record"></i>No record (counted as failed)</span><span><i class="sw not-installed"></i>Not installed</span>
+  </div>
+}

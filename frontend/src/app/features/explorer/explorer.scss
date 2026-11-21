@@ -1,0 +1,25 @@
+:host { display: block; }
+.wrap { padding: 18px 24px 40px; max-width: 1400px; margin: 0 auto; }
+.wrap.narrow { max-width: 980px; }
+.title-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; h1 { margin: 0; font-size: 22px; } .sub { color: var(--ink-muted); font-size: 13px; } }
+.muted { color: var(--ink-muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+  header { display: flex; justify-content: space-between; align-items: center; h2 { margin: 0; font-size: 16px; } a { color: var(--ink-primary); text-decoration: none; } }
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 8px;
+    div { display: flex; flex-direction: column; } .k { font-size: 11px; color: var(--ink-muted); } b { font-size: 15px; font-variant-numeric: tabular-nums; } }
+  .health { font-size: 12px; color: var(--ink-secondary); }
+  footer { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hairline);
+    a { color: var(--accent); text-decoration: none; font-size: 13px; } } }
+.toolbar { display: flex; gap: 8px; margin-bottom: 10px;
+  input, select { height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font: inherit; background: var(--surface); }
+  input { flex: 1; max-width: 420px; } }
+.grid { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px;
+  th { text-align: left; font-size: 12px; color: var(--ink-muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--plane); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .addr { color: var(--ink-secondary); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr.click { cursor: pointer; } tr.click:hover td { background: var(--hover); }
+  a { color: var(--accent); text-decoration: none; } }
+.virt { margin-left: 6px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--chip); color: var(--ink-secondary); }
+.map-link { float: right; color: var(--accent); text-decoration: none; font-size: 13px; }
