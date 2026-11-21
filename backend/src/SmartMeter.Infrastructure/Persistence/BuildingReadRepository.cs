@@ -53,32 +53,58 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
     public async Task<IReadOnlyList<BuildingMeterRow>> GetMetersPageAsync(string buildingKey, DaySelection day, string? search,
         MeterStatusFilter status, MeterSort sort, bool descending, int offset, int take, CancellationToken ct)
     {
-        var (sql, p) = MetersSql(buildingKey, day, search, status);
+        var (where, p) = MetersWhere(buildingKey, day, search, status);
         var dir = descending ? "DESC" : "ASC";
-        var order = sort switch
+        var column = sort switch
         {
-            MeterSort.CommDays => $"h.CommDays {dir}",
-            MeterSort.LastComm => $"h.LastCommDate {dir}",
-            MeterSort.Nsp => $"h.NspId {dir}",
-            MeterSort.Manufacturer => $"h.ManufacturerId {dir}",
-            MeterSort.Installation => $"h.InstallationDate {dir}",
-            _ => $"h.MeterId {dir}",
+            MeterSort.CommDays => "CommDays",
+            MeterSort.LastComm => "LastCommDate",
+            MeterSort.Nsp => "NspId",
+            MeterSort.Manufacturer => "ManufacturerId",
+            MeterSort.Installation => "InstallationDate",
+            _ => "MeterId",
         };
-        var tieBreak = sort == MeterSort.MeterId ? "" : ", h.MeterId";
-        sql.Append($" ORDER BY {order}{tieBreak} OFFSET @offset ROWS FETCH NEXT @take ROWS ONLY;");
+        string OrderBy(string alias) => column == "MeterId"
+            ? $"{alias}.MeterId {dir}"
+            : $"{alias}.{column} {dir}, {alias}.MeterId";
+        // Page on MeterHealth alone (index seek on BuildingKey), then fetch addresses for the page rows only.
+        var sql = $"""
+            WITH pg AS (
+                SELECT h.MeterSk, h.MeterId, h.NspId, h.ManufacturerId, h.InstallationDate, h.HealthClass, h.EligDays, h.CommDays,
+                       h.LastCommDate, h.EligMask, h.CommMask, COUNT_BIG(*) OVER () AS TotalCount
+                FROM sm.MeterHealth h
+                WHERE {where}
+                ORDER BY {OrderBy("h")}
+                OFFSET @offset ROWS FETCH NEXT @take ROWS ONLY
+            )
+            SELECT pg.MeterId, m.Address, pg.NspId, pg.ManufacturerId, pg.InstallationDate, pg.HealthClass, pg.EligDays, pg.CommDays,
+                   pg.LastCommDate, pg.EligMask, pg.CommMask, pg.TotalCount
+            FROM pg
+            JOIN sm.Meter m ON m.MeterSk = pg.MeterSk
+            ORDER BY {OrderBy("pg")}
+            OPTION (LOOP JOIN);
+            """;
         p.Add("offset", offset);
         p.Add("take", take);
         await using var conn = await db.OpenAsync(ct);
-        return (await conn.QueryAsync<BuildingMeterRow>(new CommandDefinition(sql.ToString(), p, cancellationToken: ct))).AsList();
+        return (await conn.QueryAsync<BuildingMeterRow>(new CommandDefinition(sql, p, cancellationToken: ct))).AsList();
     }
 
     public async IAsyncEnumerable<BuildingMeterRow> StreamMetersAsync(string buildingKey, DaySelection day, string? search,
         MeterStatusFilter status, [EnumeratorCancellation] CancellationToken ct)
     {
-        var (sql, p) = MetersSql(buildingKey, day, search, status);
-        sql.Append(" ORDER BY h.MeterId;");
+        var (where, p) = MetersWhere(buildingKey, day, search, status);
+        var sql = $"""
+            SELECT h.MeterId, m.Address, h.NspId, h.ManufacturerId, h.InstallationDate, h.HealthClass, h.EligDays, h.CommDays,
+                   h.LastCommDate, h.EligMask, h.CommMask, CAST(0 AS bigint) AS TotalCount
+            FROM sm.MeterHealth h
+            JOIN sm.Meter m ON m.MeterSk = h.MeterSk
+            WHERE {where}
+            ORDER BY h.MeterId
+            OPTION (LOOP JOIN);
+            """;
         await using var conn = await db.OpenAsync(ct);
-        await foreach (var row in conn.QueryUnbufferedAsync<BuildingMeterRow>(sql.ToString(), p).WithCancellation(ct))
+        await foreach (var row in conn.QueryUnbufferedAsync<BuildingMeterRow>(sql, p).WithCancellation(ct))
             yield return row;
     }
 
@@ -89,26 +115,21 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
         return (await conn.QueryAsync<MeterCommRow>(new CommandDefinition(sql, new { key = buildingKey }, cancellationToken: ct))).AsList();
     }
 
-    private static (StringBuilder Sql, DynamicParameters P) MetersSql(string buildingKey, DaySelection day, string? search, MeterStatusFilter status)
+    private static (string Where, DynamicParameters P) MetersWhere(string buildingKey, DaySelection day, string? search, MeterStatusFilter status)
     {
         var p = new DynamicParameters();
         p.Add("key", buildingKey);
         p.Add("bit", day.Bit);
-        var sql = new StringBuilder("""
-            SELECT h.MeterId, m.Address, h.NspId, h.ManufacturerId, h.InstallationDate, h.HealthClass, h.EligDays, h.CommDays,
-                   h.LastCommDate, h.EligMask, h.CommMask, COUNT_BIG(*) OVER () AS TotalCount
-            FROM sm.MeterHealth h
-            JOIN sm.Meter m ON m.MeterSk = h.MeterSk
-            WHERE h.BuildingKey = @key
-            """);
+        var where = new StringBuilder("h.BuildingKey = @key");
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = SqlText.EscapeLike(search.Trim());
-            sql.Append(" AND (h.MeterId LIKE @prefix OR m.Address LIKE @contains)");
+            // meter id prefix, or address contains (address lives on sm.Meter: correlated seek per candidate row)
+            where.Append(" AND (h.MeterId LIKE @prefix OR EXISTS (SELECT 1 FROM sm.Meter ma WHERE ma.MeterSk = h.MeterSk AND ma.Address LIKE @contains))");
             p.Add("prefix", term + "%");
             p.Add("contains", "%" + term + "%");
         }
-        sql.Append(status switch
+        where.Append(status switch
         {
             MeterStatusFilter.Communicating => " AND (RIGHT_SHIFT(h.CommMask, @bit) & 1) = 1",
             MeterStatusFilter.Failing => " AND (RIGHT_SHIFT(h.EligMask, @bit) & 1) = 1 AND (RIGHT_SHIFT(h.CommMask, @bit) & 1) = 0",
@@ -117,6 +138,6 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
             MeterStatusFilter.Intermittent => " AND h.HealthClass = 1",
             _ => "",
         });
-        return (sql, p);
+        return (where.ToString(), p);
     }
 }
