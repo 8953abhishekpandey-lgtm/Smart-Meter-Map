@@ -2,9 +2,11 @@
 
 All numbers below were **measured** (not estimated) on a deliberately small box, so production hardware will be faster:
 
-* one container host, **4 vCPU, 15 GB RAM**, local overlay disk
-* SQL Server 2022 Developer (RTM-CU28) in Docker, **memory capped at 6 GB**
-* one API instance (.NET 10, Release), no Redis (HybridCache L1 only), Angular served by `ng serve`
+* one Linux VM, **4 vCPU (Xeon 2.1 GHz), 15 GB RAM**, shared with everything else below
+* **SQL Server 2025** (RTM-CU11, Developer = Enterprise feature set) installed **natively** (no containers), default
+  memory settings, MAXDOP 0
+* one API instance from the **release bundle** (.NET 10, Release, framework-dependent) serving the Angular app itself,
+  no Redis (HybridCache L1 only), authentication off for the run
 * synthetic fleets from `sm.usp_GenerateDemoData` (12 zones / 4 cities, outage pockets, NSP coverage holes)
 
 <!-- MEASUREMENTS -->
@@ -51,8 +53,9 @@ groups, minimal logging under `BULK_LOGGED`). Upload chunks are 8 MB and resumab
 ## Running the load test
 
 ```bash
-# against the compose stack (nginx on :8080) - 50 concurrent map users + 6 heavy analytics calls/minute
-docker run --rm -i --network host -e BASE_URL=http://localhost:8080 -e VUS=50 -e HOLD=3m grafana/k6 run - < loadtest/k6-dashboard.js
+# k6 is a single native binary (https://k6.io). 50 concurrent map users + 6 heavy analytics calls/minute
+BASE_URL=http://appserver:8080 VUS=50 HOLD=3m k6 run loadtest/k6-dashboard.js
+# with authentication on: add TOKEN=<bearer token>
 ```
 
 The scenario mixes KPI + options + trend loads, four random pans/zooms per iteration across the four cities
