@@ -13,14 +13,14 @@ WITH bn AS (
     GROUP BY s.BuildingKey, s.NspId
     HAVING SUM(s.MeterCount) >= @MinMetersPerNsp AND SUM(s.EligTotal) > 0
 ), strong AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY BuildingKey ORDER BY Comm * 1.0 / Expected DESC, Meters DESC) AS rn
-    FROM bn WHERE Comm * 1.0 / Expected >= @Strong
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY BuildingKey ORDER BY Comm * 1.0 / NULLIF(Expected, 0) DESC, Meters DESC) AS rn
+    FROM bn WHERE Comm * 1.0 / NULLIF(Expected, 0) >= @Strong
 ), weak AS (
-    SELECT * FROM bn WHERE (Expected - Comm) * 1.0 / Expected >= @WeakFailure
+    SELECT * FROM bn WHERE (Expected - Comm) * 1.0 / NULLIF(Expected, 0) >= @WeakFailure
 )
 SELECT TOP (25) b.BuildingKey, b.Name, z.Name AS Zone,
-       ns.Name AS StrongNsp, s.Meters AS StrongMeters, CAST(100.0 * s.Comm / s.Expected AS decimal(5, 1)) AS StrongSuccessPct,
-       nw.Name AS WeakNsp,   w.Meters AS WeakMeters,   CAST(100.0 * (w.Expected - w.Comm) / w.Expected AS decimal(5, 1)) AS WeakFailurePct
+       ns.Name AS StrongNsp, s.Meters AS StrongMeters, CAST(100.0 * s.Comm / NULLIF(s.Expected, 0) AS decimal(5, 1)) AS StrongSuccessPct,
+       nw.Name AS WeakNsp,   w.Meters AS WeakMeters,   CAST(100.0 * (w.Expected - w.Comm) / NULLIF(w.Expected, 0) AS decimal(5, 1)) AS WeakFailurePct
 FROM weak w
 JOIN strong s ON s.BuildingKey = w.BuildingKey AND s.rn = 1
 JOIN sm.Building b ON b.BuildingKey = w.BuildingKey

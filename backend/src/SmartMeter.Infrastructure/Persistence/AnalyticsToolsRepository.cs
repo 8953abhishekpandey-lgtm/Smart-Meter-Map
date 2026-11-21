@@ -42,7 +42,7 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
             SELECT TOP (@maxRows) t.BuildingKey, b.Lon, b.Lat, t.NspId, t.Meters, t.Expected, t.Communicating
             FROM t
             JOIN sm.Building b ON b.BuildingKey = t.BuildingKey
-            WHERE t.BE > 0 AND CAST(t.BE - t.BC AS float) / t.BE > @minRate AND b.Lon IS NOT NULL
+            WHERE t.BE > 0 AND CAST(t.BE - t.BC AS float) / NULLIF(t.BE, 0) > @minRate AND b.Lon IS NOT NULL
             ORDER BY t.BE - t.BC DESC;
             """;
         await using var conn = await db.OpenAsync(ct);
@@ -138,10 +138,10 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
                 GROUP BY s.BuildingKey, s.NspId
                 HAVING SUM({s.Meters}) >= @minMeters AND SUM(CAST({s.MetricE(day)} AS bigint)) > 0
             ), strong AS (
-                SELECT bn.*, ROW_NUMBER() OVER (PARTITION BY bn.BuildingKey ORDER BY CAST(bn.Comm AS float) / bn.Expected DESC, bn.Meters DESC) AS rn
-                FROM bn WHERE CAST(bn.Comm AS float) / bn.Expected >= @strong
+                SELECT bn.*, ROW_NUMBER() OVER (PARTITION BY bn.BuildingKey ORDER BY CAST(bn.Comm AS float) / NULLIF(bn.Expected, 0) DESC, bn.Meters DESC) AS rn
+                FROM bn WHERE CAST(bn.Comm AS float) / NULLIF(bn.Expected, 0) >= @strong
             ), weak AS (
-                SELECT bn.* FROM bn WHERE CAST(bn.Expected - bn.Comm AS float) / bn.Expected >= @weak
+                SELECT bn.* FROM bn WHERE CAST(bn.Expected - bn.Comm AS float) / NULLIF(bn.Expected, 0) >= @weak
             )
             SELECT b.BuildingKey, b.Name, b.Address, b.ZoneId, b.Lon, b.Lat,
                    st.NspId AS StrongNspId, st.Meters AS StrongMeters, st.Expected AS StrongExpected, st.Comm AS StrongCommunicating,
@@ -150,7 +150,7 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
             FROM weak w
             JOIN strong st ON st.BuildingKey = w.BuildingKey AND st.rn = 1 AND st.NspId <> w.NspId
             JOIN sm.Building b ON b.BuildingKey = w.BuildingKey
-            ORDER BY CAST(w.Expected - w.Comm AS float) / w.Expected * w.Meters DESC, b.BuildingKey
+            ORDER BY CAST(w.Expected - w.Comm AS float) / NULLIF(w.Expected, 0) * w.Meters DESC, b.BuildingKey
             OFFSET @offset ROWS FETCH NEXT @take ROWS ONLY;
             """;
         await using var conn = await db.OpenAsync(ct);

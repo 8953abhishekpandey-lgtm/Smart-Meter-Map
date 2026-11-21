@@ -14,7 +14,7 @@ INTO #hot
 FROM sm.BuildingSummary s
 WHERE s.Lon IS NOT NULL
 GROUP BY s.BuildingKey
-HAVING SUM(s.E30) > 0 AND (SUM(s.E30) - SUM(s.C30)) * 1.0 / SUM(s.E30) > @MinFailureRate;
+HAVING SUM(s.E30) > 0 AND (SUM(s.E30) - SUM(s.C30)) * 1.0 / NULLIF(SUM(s.E30), 0) > @MinFailureRate;
 
 -- equirectangular metres (good to < 1% at city scale)
 ALTER TABLE #hot ADD Cx int, Cy int;

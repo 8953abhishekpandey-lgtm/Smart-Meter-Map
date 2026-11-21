@@ -73,7 +73,7 @@ open http://localhost:8080        # map dashboard
 * **SSMS**: connect to `localhost,1433` with `sa` (or the least-privilege `smartmeter_app` login); database `SmartMeterDb`.
 * `SEED_DEMO_METERS=300000` generates a realistic synthetic fleet (12 zones in 4 cities, outage pockets, NSP coverage
   holes, dead/intermittent meters, new installation lots). Set it to `0` and upload your own CIS + MDM files instead.
-* API docs (OpenAPI + Scalar UI): `http://localhost:8080/api/...` via the proxy, or `/scalar` on the API container.
+* API docs (OpenAPI + Scalar UI): `http://localhost:8080/scalar` (enabled by `API_DOCS=true`; switch off in production).
 * Jobs dashboard: `/hangfire` (Development, or authenticated `admin` role).
 
 Building behind a TLS-inspecting corporate proxy: `docker compose build` with
