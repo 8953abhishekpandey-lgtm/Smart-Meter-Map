@@ -2,10 +2,10 @@
 .map-wrap { position: relative; height: 100%; }
 .map { position: absolute; inset: 0; background: #e9ecef; }
 .overlay { position: absolute; z-index: 5; }
-.top-left { top: 12px; left: 58px; }
+.top-left { top: 10px; left: 48px; }
 .top-right { top: 12px; right: 12px; }
-.bottom-left { bottom: 24px; left: 12px; }
-.bottom-right { bottom: 24px; right: 12px; }
+.bottom-left { bottom: 34px; left: 12px; }
+.bottom-right { bottom: 34px; right: 12px; }
 .draw-tools, .basemaps {
   display: flex; background: var(--surface); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden;
   button { border: 0; background: transparent; padding: 7px 10px; font: inherit; font-size: 12px; cursor: pointer; color: var(--ink-secondary);
@@ -27,3 +27,8 @@
 .tt-sub { color: var(--ink-muted); margin: 1px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tt-grid { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin-top: 4px; span { color: var(--ink-secondary); } b { text-align: right; font-variant-numeric: tabular-nums; } }
 .tt-hint { margin-top: 6px; color: var(--ink-muted); }
+
+/* OpenLayers controls */
+:host ::ng-deep .ol-zoom { top: 10px; left: 10px; }
+:host ::ng-deep .ol-scale-line { left: 50%; right: auto; bottom: 8px; transform: translateX(-50%); background: rgba(20, 23, 28, .55); }
+:host ::ng-deep .ol-attribution { font-size: 11px; }

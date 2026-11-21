@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-/** All feature areas are lazy-loaded (ArcGIS is only downloaded with the dashboard chunk). */
+/** All feature areas are lazy-loaded (OpenLayers + ECharts are only downloaded with the dashboard chunk). */
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: 'dashboard', loadComponent: () => import('./features/dashboard/dashboard.page').then((m) => m.DashboardPage), title: 'Smart Meter GIS · Dashboard' },

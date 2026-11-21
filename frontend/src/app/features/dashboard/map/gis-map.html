@@ -1,11 +1,11 @@
 <div class="map-wrap">
-  <div #mapHost class="map" aria-label="Smart meter communication map"></div>
+  <div #mapHost class="map" aria-label="Smart meter communication map (OpenLayers)"></div>
 
   <div class="overlay top-left draw-tools" role="toolbar" aria-label="Selection tools">
-    <button type="button" (click)="draw('lasso')" [class.on]="drawing()" title="Free-hand lasso selection">Lasso</button>
-    <button type="button" (click)="draw('polygon')" title="Click to add vertices, double-click to finish">Polygon</button>
-    <button type="button" (click)="draw('rectangle')" title="Drag a rectangle">Box</button>
-    <button type="button" (click)="draw('clear')" title="Clear selection">Clear</button>
+    <button type="button" (click)="drawTool('lasso')" [class.on]="drawing()" title="Free-hand lasso: press, drag and release">Lasso</button>
+    <button type="button" (click)="drawTool('polygon')" title="Click to add vertices, double-click to finish">Polygon</button>
+    <button type="button" (click)="drawTool('rectangle')" title="Press, drag and release to draw a box">Box</button>
+    <button type="button" (click)="drawTool('clear')" title="Clear selection">Clear</button>
     <button type="button" (click)="home()" title="Zoom to the whole fleet">Fleet</button>
   </div>
 
