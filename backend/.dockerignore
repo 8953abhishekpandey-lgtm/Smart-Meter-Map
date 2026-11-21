@@ -1,7 +1,0 @@
-**/bin/
-**/obj/
-**/.uploads/
-**/TestResults/
-tests/
-*.user
-.vs/

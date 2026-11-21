@@ -8,8 +8,8 @@ a building and a single meter - with sub-second map and dashboard responses.
 |---|---|
 | Database | **SQL Server 2022+** (port **1433**, manage with **SSMS**) - daily partitioned columnstore log, spatial index, columnstore pre-aggregations |
 | API | **.NET 10** (LTS) Web API, Clean Architecture, CQRS (MediatR), FluentValidation, Dapper, SqlBulkCopy, Hangfire, SignalR, Serilog, OpenTelemetry, HybridCache + Redis |
-| Web | **Angular 22** (standalone, zoneless, Signals, OnPush, lazy routes), **ArcGIS Maps SDK for JavaScript 5** (`@arcgis/core`), **Apache ECharts 6** |
-| Ops | Docker images (non-root), docker-compose, health checks, JWT/OIDC with a dev toggle, k6 load tests |
+| Web | **Angular 22** (standalone, zoneless, Signals, OnPush, lazy routes), **OpenLayers 10** (open-source, BSD-2) on open basemaps, **Apache ECharts 6** |
+| Ops | **No Docker**: one self-contained release folder (API + SPA) run as a **Windows Service** or **systemd** unit, GitLab CI on shell runners, health checks, JWT/OIDC with a dev toggle, k6 load tests |
 
 > .NET 8 reached end of support on 10 Nov 2026, so the solution targets **.NET 10 LTS** (one line in
 > `backend/Directory.Build.props`). The existing `src/` MeterMap app is kept untouched - see [`src/README.md`](src/README.md).
@@ -18,7 +18,7 @@ a building and a single meter - with sub-second map and dashboard responses.
 
 ## Contents
 1. [What you get](#1-what-you-get)
-2. [Quick start (Docker)](#2-quick-start-docker)
+2. [Deployment (no Docker)](#2-deployment-no-docker)
 3. [Local development](#3-local-development)
 4. [Architecture](#4-architecture)
 5. [Database design (SQL Server)](#5-database-design-sql-server)
@@ -62,28 +62,86 @@ validation report, set-based merge, live progress over SignalR, automatic coales
 
 ---
 
-## 2. Quick start (Docker)
+## 2. Deployment (no Docker)
+
+Nothing in this platform needs containers. Production is **three things on servers you already run**:
+
+| Piece | Where | How |
+|---|---|---|
+| `SmartMeterDb` | your existing SQL Server instance (port 1433) | `database/deploy.sh` / `deploy.ps1` (sqlcmd) or open the scripts in SSMS |
+| API + web app (one process) | Windows Server or Linux app server | release zip → `deploy/install-windows-service.ps1` or `deploy/install-linux.sh` |
+| (optional) Redis | any Redis 6+ | shared L2 cache + SignalR backplane when you run 2+ API nodes |
+
+### 2.1 Database - a separate `SmartMeterDb` on the existing instance
+The platform keeps **all** of its objects in its own database, `SmartMeterDb`. The deploy scripts never connect to,
+read, alter, seed or clean up any other database on the instance (your existing Users / DISCOMs / servers / tasks /
+history / audit database is untouched). Demo seeding is **off** unless you explicitly pass `SEED_DEMO_METERS`.
 
 ```bash
-cp .env.example .env              # set SA_PASSWORD / APP_DB_PASSWORD (and SEED_DEMO_METERS)
-docker compose up -d --build      # SQL Server 2022, schema deploy (+ demo fleet), Redis, API, web
-open http://localhost:8080        # map dashboard
+cd database
+# deploy login needs dbcreator (first run) and db_owner on SmartMeterDb - it is NOT the application login
+SQL_SERVER='sqlprod01,1433' SQL_USER='<deploy login>' SQL_PASSWORD='<...>' APP_DB_PASSWORD='<app password>' ./deploy.sh
+#   Windows:  .\deploy.ps1 -Server 'sqlprod01,1433' -User '<deploy login>' -Password '<...>' -AppPassword '<app password>'
+#   SSMS:     open 00..05 and execute in order, then 06_security.sql in SQLCMD mode (Query > SQLCMD Mode)
 ```
+Re-running is safe (every script is idempotent; RCSI is only switched on if it is off, so re-deploys never kick
+sessions). `06_security.sql` creates/updates the least-privilege `smartmeter_app` login the API uses.
 
-* **SSMS**: connect to `localhost,1433` with `sa` (or the least-privilege `smartmeter_app` login); database `SmartMeterDb`.
-* `SEED_DEMO_METERS=300000` generates a realistic synthetic fleet (12 zones in 4 cities, outage pockets, NSP coverage
-  holes, dead/intermittent meters, new installation lots). Set it to `0` and upload your own CIS + MDM files instead.
-* API docs (OpenAPI + Scalar UI): `http://localhost:8080/scalar` (enabled by `API_DOCS=true`; switch off in production).
-* Jobs dashboard: `/hangfire` (Development, or authenticated `admin` role).
+### 2.2 Application - one folder, no web server needed
+```bash
+./deploy/build-release.sh win-x64      # or linux-x64 ->  artifacts/smartmeter-<rid>.zip
+```
+The zip contains the framework-dependent .NET 10 API **with the Angular app inside `wwwroot/`** (Kestrel serves the
+SPA with Brotli/Gzip, immutable caching for hashed bundles and `no-cache` for `index.html` / `config.json`), the
+database scripts and `appsettings.Production.template.json`. Prerequisite on the app server: the
+**ASP.NET Core 10 Runtime** (Windows: *Hosting Bundle*).
 
-Building behind a TLS-inspecting corporate proxy: `docker compose build` with
-`--secret id=extra_ca,src=corp-ca.crt` (both Dockerfiles accept an optional CA secret that is never stored in a layer).
+**Windows Server** (as Administrator):
+```powershell
+Expand-Archive smartmeter-win-x64.zip C:\SmartMeter\release
+.\deploy\install-windows-service.ps1 -Source C:\SmartMeter\release\smartmeter-win-x64 -Port 8080
+# first run creates C:\SmartMeter\app\appsettings.Production.json from the template: set the connection string
+# (or use the ConnectionStrings__SmartMeterDb machine env var) + Auth, restrict the file ACL, then Start-Service SmartMeterApi
+```
+Installs the `SmartMeterApi` Windows Service (auto start, restart on failure, firewall rule). Upgrades stop the
+service, mirror the new files and **keep** `appsettings.Production.json` and `wwwroot\config.json`.
+To publish through **IIS** instead, point an IIS site at the same folder (the Hosting Bundle's ASP.NET Core Module
+runs it in-process) - no other changes needed.
+
+**Linux** (as root):
+```bash
+unzip smartmeter-linux-x64.zip -d /tmp/release
+sudo ./deploy/install-linux.sh /tmp/release/smartmeter-linux-x64
+# secrets go into /etc/smartmeter/smartmeter.env (mode 600), e.g. ConnectionStrings__SmartMeterDb=...
+```
+Installs `/opt/smartmeter/app` + the hardened `smartmeter.service` systemd unit (`Type=notify`, dedicated user).
+
+Put the corporate reverse proxy / load balancer (IIS ARR, F5, HAProxy, nginx if you already have one) in front for
+TLS; list its addresses under `ReverseProxy:KnownProxies` so the API trusts its `X-Forwarded-For/Proto` headers.
+
+### 2.3 GitLab CI (company GitLab, `Test-Branch`)
+[`.gitlab-ci.yml`](.gitlab-ci.yml) runs every server operation as a pipeline job on **shell runners** (no Docker
+executor, no `image:`):
+
+| Stage | Job | Runs |
+|---|---|---|
+| test | `backend:test`, `frontend:test` | every MR / `Test-Branch` / default-branch pipeline |
+| package | `package:linux`, `package:windows` | builds the release zips (job artifacts, 30 days) |
+| deploy | `db:deploy` (manual, protected) | `database/deploy.sh` against `SmartMeterDb` only, `SEED_DEMO_METERS=0` |
+| deploy | `app:deploy:linux` / `app:deploy:windows` (manual, protected) | installer on the app server, then waits for `/health/ready` |
+| operate | `analytics:refresh`, `smoke:test` (manual, protected) | `EXEC sm.usp_RefreshAnalytics`, post-deploy smoke test |
+
+Secrets exist **only** as *protected + masked* CI/CD variables (`SM_SQL_SERVER`, `SM_SQL_DEPLOY_USER`,
+`SM_SQL_DEPLOY_PASSWORD`, `SM_APP_DB_PASSWORD`, `SM_BASE_URL`, `SM_API_TOKEN`), so they are only exposed to
+pipelines on protected branches such as `Test-Branch`. Runner tags: `smartmeter-build` (.NET 10 SDK, Node 22),
+`smartmeter-db` (sqlcmd), `smartmeter-app` / `smartmeter-app-windows` (the app servers). `resource_group`s
+serialise database and app deployments.
 
 ---
 
 ## 3. Local development
 
-Prerequisites: .NET 10 SDK, Node 22, SQL Server 2022+ (local install, Docker or Azure SQL MI), `sqlcmd` or SSMS.
+Prerequisites: .NET 10 SDK, Node 22, SQL Server 2022+ (Developer edition is free) reachable on 1433, `sqlcmd` or SSMS.
 
 ```bash
 # 1. database (sqlcmd) - or open database/00..06 in SSMS and execute in order (06 in SQLCMD mode)
@@ -96,12 +154,17 @@ cd ../backend
 dotnet user-secrets --project src/SmartMeter.Api set "ConnectionStrings:SmartMeterDb" \
   "Server=localhost,1433;Database=SmartMeterDb;User Id=smartmeter_app;Password=<app password>;TrustServerCertificate=True"
 dotnet run --project src/SmartMeter.Api --launch-profile http
-dotnet test                                   # 51 unit tests
+dotnet test                                   # 53 unit tests
 
 # 3. Web  (http://localhost:4200, proxies /api and /hubs to :5080)
 cd ../frontend && npm ci && npm start
 npx ng test --watch=false                     # Vitest unit tests
 ```
+
+* `SEED_DEMO_METERS=300000` generates a realistic synthetic fleet (12 zones in 4 cities, outage pockets, NSP coverage
+  holes, dead/intermittent meters, new installation lots) - for development databases only.
+* **SSMS**: connect to `localhost,1433`; database `SmartMeterDb`.
+* Jobs dashboard: `/hangfire` (Development, or authenticated `admin` role).
 
 ---
 
@@ -111,13 +174,12 @@ npx ng test --watch=false                     # Vitest unit tests
 flowchart LR
   subgraph Browser
     A[Angular 22 SPA<br/>Signals · OnPush · lazy routes]
-    M[ArcGIS Maps SDK<br/>client FeatureLayer · Sketch]
+    M[OpenLayers 10<br/>vector bubbles · draw tools]
     E[ECharts]
   end
-  subgraph Web[nginx]
-    N[static SPA + /assets/arcgis<br/>reverse proxy /api /hubs]
-  end
-  subgraph API[ASP.NET Core .NET 10]
+  T[(Basemap tiles<br/>OSM · EOX Sentinel-2<br/>or your own tile server)]
+  subgraph API[ASP.NET Core .NET 10 - Windows Service / systemd]
+    S[Static SPA<br/>wwwroot + fallback] 
     C[Controllers] --> MD[MediatR pipeline<br/>Perf → Validation → Cache]
     MD --> H[Query / command handlers]
     H --> R[Dapper read repositories]
@@ -129,8 +191,10 @@ flowchart LR
     SQL[(SQL Server 2022<br/>SmartMeterDb)]
     RD[(Redis<br/>L2 cache · SignalR backplane)]
   end
-  A <-->|REST + JSON (Brotli)| N <--> C
-  A <-->|WebSocket| N <--> SR
+  A <-->|REST + JSON (Brotli)| C
+  A <-->|WebSocket| SR
+  A -->|index.html, bundles| S
+  M -->|XYZ tiles| T
   R --> SQL
   HF -->|SqlBulkCopy + merge procs| SQL
   MD <-->|HybridCache keyed by data version| RD
@@ -270,16 +334,31 @@ Errors are RFC 7807 problem details with a `traceId`.
 
 ## 8. Front-end guide
 
-* **Runtime configuration** (`config.json`, rendered from env vars in the container): `apiBaseUrl`, `arcgisApiKey`
-  (enables vector basemap styles; without a key the four basemaps use keyless public tile services),
-  `arcgisAssetsPath` (SDK assets are **self-hosted** - works on air-gapped networks), `arcgisFontsUrl` (self-hosted label
-  fonts; labels are switched off automatically when fonts are unreachable so the map never stalls), map centre/zoom, locale
-  (`en-IN` digit grouping by default).
+* **Runtime configuration** (`wwwroot/config.json` on the server, never cached, kept across upgrades): `apiBaseUrl`
+  (empty = same origin), map centre/zoom, locale (`en-IN` digit grouping by default) and optional `basemaps` overrides.
+* **Map = OpenLayers** (open-source, BSD-2, no API key, no vendor SDK). Four basemaps, all keyless and verified to
+  serve real tiles:
+
+  | Basemap | Default source | Licence / attribution |
+  |---|---|---|
+  | Streets | OpenStreetMap standard tiles | © OpenStreetMap contributors (ODbL) |
+  | Satellite | EOX **Sentinel-2 cloudless 2016** (to zoom 15) | CC BY 4.0, attribution shown on the map |
+  | Dark Gray / Light Gray | OpenStreetMap tiles through a CSS filter on the basemap canvas only | © OpenStreetMap contributors |
+
+  `tile.openstreetmap.org` is a community service with a [usage policy](https://operations.osmfoundation.org/policies/tiles/);
+  for heavy production use (or air-gapped networks) point the basemaps at your own tile server or a provider, without
+  rebuilding the app:
+  ```json
+  { "basemaps": {
+      "streets":    { "url": "https://tiles.company.local/osm/{z}/{x}/{y}.png", "attribution": "© OpenStreetMap contributors" },
+      "light-gray": { "url": "https://tiles.company.local/osm/{z}/{x}/{y}.png", "filter": "grayscale(1) brightness(1.06) contrast(0.78)" } } }
+  ```
 * State: `FilterStore` (Signals; URL-synced on the dashboard → shareable links like `/dashboard?zone=2&health=dead&building=B:BLD-0001234`),
   `MetaStore` (reloads on `dataVersionChanged`), `MapCommands` (fly-to, highlights, draw tools). Data loading uses
   `rxResource` so in-flight requests are cancelled when inputs change.
-* Map: client-side `FeatureLayer` + `UniqueValueRenderer` (status band) + size visual variable; `SketchViewModel`
-  for lasso/polygon/box; explicit Web-Mercator LODs so the view works even if the basemap provider is unreachable.
+* Map: one OpenLayers vector layer of server-aggregated bubbles (area-proportional radius, band colour, labels
+  decluttered so overlapping cells never garble counts), a highlight layer (cluster hulls, selected building, meter pin)
+  and `Draw` interactions for free-hand lasso, polygon and box. Bubbles render even if the tile server is unreachable.
 * Charts follow a single-axis rule (no dual axes): success % lines with counts in tooltips, kWh bars from zero.
 
 ---
@@ -293,10 +372,11 @@ Errors are RFC 7807 problem details with a `traceId`.
 * **Least privilege**: the API connects as `smartmeter_app` (`db_datareader`, `db_datawriter`, `EXECUTE` on `sm`,
   insert into `stage`); all DDL happens in `EXECUTE AS OWNER` procedures; staging table names are validated server-side.
 * No secrets in config files: connection strings, MDM API key and signing key come from environment / user-secrets /
-  your vault. `.env` is git-ignored. SQL passwords are passed as sqlcmd variables, never defaulted in scripts.
+  your vault / protected GitLab CI variables. SQL passwords are passed as sqlcmd variables, never defaulted in scripts.
 * Parameterised SQL everywhere (dynamic SQL only interpolates whitelisted identifiers/column indexes), CSV
   formula-injection guarding, upload size/extension limits, per-user rate limiting + an analytics concurrency limiter,
-  security headers, non-root containers.
+  security headers (`nosniff`, `SAMEORIGIN`, origin-only referrer), Windows Service / systemd unit running under a
+  dedicated low-privilege account (systemd unit hardened with `ProtectSystem=full`, `NoNewPrivileges`, …).
 
 ---
 
@@ -323,7 +403,8 @@ See [`docs/performance.md`](docs/performance.md) for measured numbers (300K and 
 results and sizing guidance for 15M+ meters. Run the load test yourself:
 
 ```bash
-docker run --rm -i --network host -e BASE_URL=http://localhost:8080 -e VUS=50 grafana/k6 run - < loadtest/k6-dashboard.js
+# k6 is a single native binary (https://k6.io) - no container needed
+BASE_URL=http://localhost:8080 VUS=50 HOLD=3m k6 run loadtest/k6-dashboard.js
 ```
 
 ---
@@ -331,11 +412,13 @@ docker run --rm -i --network host -e BASE_URL=http://localhost:8080 -e VUS=50 gr
 ## 12. Repository layout
 
 ```
-database/        SQL Server scripts, deploy.sh / deploy.ps1, reference queries, db-init Dockerfile
-backend/         .NET 10 solution (Domain / Application / Infrastructure / Api + UnitTests), Dockerfile
-frontend/        Angular 22 + ArcGIS + ECharts app, nginx config, Dockerfile
+database/        SQL Server scripts, deploy.sh / deploy.ps1, reference queries
+backend/         .NET 10 solution (Domain / Application / Infrastructure / Api + UnitTests)
+frontend/        Angular 22 + OpenLayers + ECharts app
+deploy/          release build scripts, Windows Service + systemd installers, production settings template
 loadtest/        k6 scenarios
+scripts/         post-deployment smoke test
 docs/            performance & scaling notes
-docker-compose.yml, .env.example
+.gitlab-ci.yml   company GitLab pipeline (shell runners);  .github/workflows/ci.yml  build + test only
 src/, tests/, MeterMap.slnx   legacy MeterMap.NET application (unchanged)
 ```

@@ -1,0 +1,133 @@
+# Smart Meter GIS Platform - GitLab CI/CD (shell runners only, no Docker).
+#
+# Runner tags (register shell-executor runners with these tags):
+#   smartmeter-build  : .NET 10 SDK, Node 22, bash, zip           (build / test / package)
+#   smartmeter-db     : sqlcmd (mssql-tools18), network to SQL Server (database deploy, refresh)
+#   smartmeter-app    : the application server itself (Linux: systemd, or Windows via smartmeter-app-windows)
+#
+# Protected + masked CI/CD variables (Settings > CI/CD > Variables; only exposed on protected branches such as Test-Branch):
+#   SM_SQL_SERVER            e.g. sqlprod01,1433
+#   SM_SQL_DEPLOY_USER       login with dbcreator + db_owner on SmartMeterDb (NOT used by the app)
+#   SM_SQL_DEPLOY_PASSWORD   masked
+#   SM_APP_DB_PASSWORD       masked - password for the least-privilege smartmeter_app login
+#   SM_BASE_URL              e.g. http://smartmeter-app01:8080
+#   SM_API_TOKEN             masked, optional - bearer token for smoke tests when Auth is enabled
+#
+# The database jobs only ever touch the dedicated SmartMeterDb database: existing databases on the server are never
+# read, altered, seeded or cleaned up. Demo seeding is forced off.
+
+stages: [test, package, deploy, operate]
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "Test-Branch"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.protected_manual: &protected_manual
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE != "merge_request_event"
+      when: manual
+  allow_failure: false
+
+# ---------------------------------------------------------------- test
+backend:test:
+  stage: test
+  tags: [smartmeter-build]
+  script:
+    - cd backend
+    - dotnet restore
+    - dotnet build --no-restore -c Release -warnaserror
+    - dotnet test --no-build -c Release --logger "trx;LogFileName=unit.trx"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths: [backend/tests/SmartMeter.UnitTests/TestResults/]
+
+frontend:test:
+  stage: test
+  tags: [smartmeter-build]
+  script:
+    - cd frontend
+    - npm ci
+    - npx ng build --configuration production
+    - npx ng test --watch=false
+
+# ---------------------------------------------------------------- package (single artifact: API + SPA + database scripts)
+package:linux:
+  stage: package
+  tags: [smartmeter-build]
+  needs: [backend:test, frontend:test]
+  script:
+    - ./deploy/build-release.sh linux-x64
+  artifacts:
+    expire_in: 30 days
+    paths: [artifacts/smartmeter-linux-x64.zip]
+
+package:windows:
+  stage: package
+  tags: [smartmeter-build]
+  needs: [backend:test, frontend:test]
+  script:
+    - ./deploy/build-release.sh win-x64
+  artifacts:
+    expire_in: 30 days
+    paths: [artifacts/smartmeter-win-x64.zip]
+
+# ---------------------------------------------------------------- deploy (manual, protected branches only)
+db:deploy:
+  stage: deploy
+  tags: [smartmeter-db]
+  <<: *protected_manual
+  resource_group: smartmeter-database
+  needs: []
+  script:
+    - cd database
+    - export SQLCMD="${SQLCMD:-/opt/mssql-tools18/bin/sqlcmd}"
+    - SQL_SERVER="$SM_SQL_SERVER" SQL_USER="$SM_SQL_DEPLOY_USER" SQL_PASSWORD="$SM_SQL_DEPLOY_PASSWORD" APP_DB_PASSWORD="$SM_APP_DB_PASSWORD" SEED_DEMO_METERS=0 ./deploy.sh
+
+app:deploy:linux:
+  stage: deploy
+  tags: [smartmeter-app]
+  <<: *protected_manual
+  resource_group: smartmeter-app
+  needs: [package:linux]
+  script:
+    - rm -rf release && mkdir release && python3 -m zipfile -e artifacts/smartmeter-linux-x64.zip release/
+    - sudo ./deploy/install-linux.sh release/smartmeter-linux-x64
+    - for i in $(seq 1 30); do curl -fsS "http://localhost:8080/health/ready" && break; sleep 2; done
+
+app:deploy:windows:
+  stage: deploy
+  tags: [smartmeter-app-windows]
+  <<: *protected_manual
+  resource_group: smartmeter-app
+  needs: [package:windows]
+  script:
+    - Expand-Archive -Force artifacts/smartmeter-win-x64.zip release
+    - powershell -ExecutionPolicy Bypass -File deploy/install-windows-service.ps1 -Source release/smartmeter-win-x64
+
+# ---------------------------------------------------------------- operate (manual server operations)
+analytics:refresh:
+  stage: operate
+  tags: [smartmeter-db]
+  <<: *protected_manual
+  resource_group: smartmeter-database
+  needs: []
+  script:
+    - export SQLCMD="${SQLCMD:-/opt/mssql-tools18/bin/sqlcmd}"
+    - $SQLCMD -S "$SM_SQL_SERVER" -U "$SM_SQL_DEPLOY_USER" -P "$SM_SQL_DEPLOY_PASSWORD" -C -I -b -d SmartMeterDb -t 0 -Q "EXEC sm.usp_RefreshAnalytics; SELECT WindowStart, WindowEnd, DataVersion, RefreshMs FROM sm.AnalyticsState;" | grep -vE "^Caution|Null value is eliminated"
+
+smoke:test:
+  stage: operate
+  tags: [smartmeter-build]
+  <<: *protected_manual
+  needs: []
+  script:
+    - BASE_URL="$SM_BASE_URL" TOKEN="${SM_API_TOKEN:-}" ./scripts/smoke-test.sh

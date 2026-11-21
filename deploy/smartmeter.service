@@ -1,0 +1,26 @@
+# systemd unit for Linux app servers:  sudo cp smartmeter.service /etc/systemd/system/ && sudo systemctl enable --now smartmeter
+[Unit]
+Description=Smart Meter GIS Platform (API + web app)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=smartmeter
+Group=smartmeter
+WorkingDirectory=/opt/smartmeter/app
+ExecStart=/usr/bin/dotnet /opt/smartmeter/app/SmartMeter.Api.dll --urls http://0.0.0.0:8080
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_gcServer=1
+# secrets (connection string, signing keys) - root-readable only:
+EnvironmentFile=-/etc/smartmeter/smartmeter.env
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/var/smartmeter
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-// Smart Meter GIS - load test (k6).  docker run --rm -i --network host -e BASE_URL=http://localhost:8080 grafana/k6 run - < k6-dashboard.js
+// Smart Meter GIS - load test (k6, native binary).  BASE_URL=http://localhost:8080 VUS=50 HOLD=3m k6 run loadtest/k6-dashboard.js
 // Models operators panning/zooming the map with random filters, opening buildings, plus a trickle of heavy analytics.
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';

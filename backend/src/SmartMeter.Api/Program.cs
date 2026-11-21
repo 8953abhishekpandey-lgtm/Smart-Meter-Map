@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using OpenTelemetry;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.Extensions.Hosting.WindowsServices;
+using Microsoft.Net.Http.Headers;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -25,8 +27,17 @@ Log.Logger = new LoggerConfiguration().MinimumLevel.Information().WriteTo.Consol
 
 try
 {
-    var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+    {
+        Args = args,
+        // Windows Service: content root = install folder (not C:\Windows\System32)
+        ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default,
+    });
     var config = builder.Configuration;
+
+    // Native hosting without containers: Windows Service / systemd unit / IIS (in-process) / console.
+    builder.Host.UseWindowsService(o => o.ServiceName = "SmartMeterApi");
+    builder.Host.UseSystemd();
 
     // ------------------------------------------------------------------ logging (Serilog, structured)
     builder.Services.AddSerilog((sp, lc) => lc
@@ -103,6 +114,9 @@ try
             o.KnownIPNetworks.Clear();
             o.KnownProxies.Clear();
         }
+        // the corporate load balancer / IIS ARR / reverse proxy addresses whose X-Forwarded-* headers are trusted
+        foreach (var ip in config.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [])
+            o.KnownProxies.Add(System.Net.IPAddress.Parse(ip));
     });
 
     // ------------------------------------------------------------------ health checks
@@ -148,10 +162,32 @@ try
     app.Use(async (ctx, next) =>
     {
         ctx.Response.Headers.XContentTypeOptions = "nosniff";
-        ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
-        ctx.Response.Headers.XFrameOptions = "DENY";
+        // tile servers (OpenStreetMap usage policy) require a valid Referer: send the origin only, never paths/queries
+        ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        ctx.Response.Headers.XFrameOptions = "SAMEORIGIN";
         await next();
     });
+    // The Angular app is served by this same process (no nginx / containers needed).
+    var serveSpa = config.GetValue("Hosting:ServeSpa", true) && File.Exists(Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "index.html"));
+    var spaFiles = new StaticFileOptions
+    {
+        OnPrepareResponse = ctx =>
+        {
+            // hashed bundles are immutable; index.html / config.json must always be revalidated
+            var name = ctx.File.Name;
+            ctx.Context.Response.Headers[HeaderNames.CacheControl] =
+                name is "index.html" or "config.json" ? "no-cache"
+                : HashedAsset().IsMatch(name) ? "public, max-age=31536000, immutable"
+                : "public, max-age=86400";
+        },
+    };
+    if (serveSpa)
+    {
+        // static files run BEFORE routing, otherwise the SPA fallback endpoint would be matched for every asset
+        app.UseDefaultFiles();
+        app.UseStaticFiles(spaFiles);
+    }
+    app.UseRouting();
     app.UseCors();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -176,7 +212,11 @@ try
             DashboardTitle = "Smart Meter jobs",
         }).AllowAnonymous();
 
-    app.MapGet("/", () => Results.Redirect(app.Environment.IsDevelopment() ? "/scalar" : "/health")).ExcludeFromDescription().AllowAnonymous();
+    if (serveSpa)
+        // client-side routes (/dashboard, /explore/...) -> index.html; API / hub / health paths are never rewritten
+        app.MapFallbackToFile("{*path:regex(^(?!api/|hubs/|health|hangfire|scalar|openapi).*$)}", "index.html", spaFiles).AllowAnonymous();
+    else
+        app.MapGet("/", () => Results.Redirect(app.Environment.IsDevelopment() ? "/scalar" : "/health")).ExcludeFromDescription().AllowAnonymous();
 
     await app.RunAsync();
 }
@@ -190,4 +230,9 @@ finally
     await Log.CloseAndFlushAsync();
 }
 
-public partial class Program;
+public partial class Program
+{
+    // Angular build output names: main-S6GWWDVX.js, chunk-B90Huocv.js, styles-O3UVVB24.css
+    [System.Text.RegularExpressions.GeneratedRegex(@"-[A-Za-z0-9_]{8}\.(js|css|mjs)$")]
+    private static partial System.Text.RegularExpressions.Regex HashedAsset();
+}
