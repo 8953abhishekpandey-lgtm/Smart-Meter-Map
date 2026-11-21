@@ -27,5 +27,5 @@ if [[ "${SEED_DEMO_METERS:-0}" -gt 0 ]]; then
   fi
 fi
 echo ">> refreshing analytics"
-run -d SmartMeterDb -t 0 -Q "EXEC sm.usp_RefreshAnalytics;" | grep -v "^Caution" || true
+run -d SmartMeterDb -t 0 -Q "EXEC sm.usp_RefreshAnalytics;" | grep -vE "^Caution|Null value is eliminated" || true
 echo "done."

@@ -1,0 +1,87 @@
+# Smart Meter Communication & Health Monitoring GIS Platform
+#   cp .env.example .env   (set the passwords)
+#   docker compose up -d --build            -> http://localhost:8080
+# SQL Server is published on 1433 so you can connect with SSMS (localhost,1433).
+name: smartmeter
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: ${MSSQL_PID:-Developer}
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?set SA_PASSWORD in .env}
+      MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-6144}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  db-init:
+    build: ./database
+    environment:
+      SQL_SERVER: db,1433
+      SQL_USER: sa
+      SQL_PASSWORD: ${SA_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      SEED_DEMO_METERS: ${SEED_DEMO_METERS:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      ConnectionStrings__SmartMeterDb: "Server=db,1433;Database=SmartMeterDb;User Id=smartmeter_app;Password=${APP_DB_PASSWORD};Encrypt=True;TrustServerCertificate=True;Max Pool Size=200"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
+      Auth__Enabled: ${AUTH_ENABLED:-false}
+      Auth__Mode: ${AUTH_MODE:-Dev}
+      Auth__Authority: ${AUTH_AUTHORITY:-}
+      Auth__Audience: ${AUTH_AUDIENCE:-smartmeter-api}
+      Auth__ClientId: ${AUTH_CLIENT_ID:-smartmeter-web}
+      Auth__DevSigningKey: ${AUTH_DEV_SIGNING_KEY:-}
+      Mdm__Mode: ${MDM_MODE:-Mock}
+      Mdm__BaseUrl: ${MDM_BASE_URL:-}
+      Mdm__ApiKey: ${MDM_API_KEY:-}
+      ReverseProxy__TrustAllProxies: "true"
+      Api__EnableDocs: ${API_DOCS:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - uploads:/var/smartmeter/uploads
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    environment:
+      API_UPSTREAM: http://api:8080
+      ARCGIS_API_KEY: ${ARCGIS_API_KEY:-}
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  sqldata:
+  uploads:

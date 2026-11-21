@@ -106,7 +106,7 @@ BEGIN
         CREATE CLUSTERED COLUMNSTORE INDEX CCI_MeterHealth ON sm.MeterHealth__next ORDER (InstallationDate);
         CREATE UNIQUE NONCLUSTERED INDEX UX_MeterHealth_MeterSk ON sm.MeterHealth__next (MeterSk);
         CREATE NONCLUSTERED INDEX IX_MeterHealth_Building ON sm.MeterHealth__next (BuildingKey)
-            INCLUDE (MeterId, NspId, ManufacturerId, InstallationDate, HealthClass, ActiveLast7,
+            INCLUDE (MeterSk, MeterId, NspId, ManufacturerId, InstallationDate, HealthClass, ActiveLast7,
                      EligDays, CommDays, LastCommDate, EligMask, CommMask);
         -- Covering index for status aggregations by filter combination.
         CREATE NONCLUSTERED INDEX IX_MeterHealth_Filters ON sm.MeterHealth__next (ZoneId, NspId, ManufacturerId, InstallationDate)
@@ -139,6 +139,7 @@ BEGIN
 
         CREATE UNIQUE CLUSTERED INDEX UCX_Building ON sm.Building__next (BuildingKey) WITH (DATA_COMPRESSION = PAGE);
         CREATE NONCLUSTERED INDEX IX_Building_Zone ON sm.Building__next (ZoneId) INCLUDE (Name, Address, MeterCount, Lon, Lat);
+        CREATE NONCLUSTERED INDEX IX_Building_LatLon ON sm.Building__next (Lat, Lon) INCLUDE (MeterCount);
 
         -- ------------------------------------------------------------ 3. BuildingSummary
         SET @sql = N'
