@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartMeter.Api/SmartMeter.Api.csproj" />
+    <Project Path="src/SmartMeter.Application/SmartMeter.Application.csproj" />
+    <Project Path="src/SmartMeter.Domain/SmartMeter.Domain.csproj" />
+    <Project Path="src/SmartMeter.Infrastructure/SmartMeter.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartMeter.UnitTests/SmartMeter.UnitTests.csproj" />
+  </Folder>
+</Solution>
