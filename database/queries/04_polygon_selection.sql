@@ -1,10 +1,15 @@
-/* Lasso / polygon selection: exact meter-level containment (independent of Building IDs) using the
-   spatial index on sm.Meter.Geom, one scan with GROUPING SETS for totals + health + NSP + make.   */
+/* Lasso / polygon selection: exact meter-level containment (independent of Building IDs), one pass with
+   GROUPING SETS for totals + health + NSP + make. sm.MeterHealth carries each meter's own Lat/Lon, so a
+   batch-mode columnstore range scan on the polygon's envelope finds the candidates and only those get the exact
+   point-in-polygon test (much faster than the spatial index for city-sized lassos).                         */
 USE [SmartMeterDb];
 SET NOCOUNT ON;
 DECLARE @Wkt nvarchar(max) = N'POLYGON((77.19 28.50, 77.25 28.50, 77.25 28.55, 77.19 28.55, 77.19 28.50))';
 DECLARE @Day date = NULL;
 DECLARE @Poly geometry = geometry::STGeomFromText(@Wkt, 4326).MakeValid();
+DECLARE @Env geometry = @Poly.STEnvelope();
+DECLARE @MinX float = @Env.STPointN(1).STX, @MinY float = @Env.STPointN(1).STY,
+        @MaxX float = @Env.STPointN(3).STX, @MaxY float = @Env.STPointN(3).STY;
 DECLARE @Bit int = (SELECT DATEDIFF(day, COALESCE(@Day, WindowEnd), WindowEnd) FROM sm.AnalyticsState);  -- bit 0 = WindowEnd
 
 SELECT CASE WHEN GROUPING(h.NspId) = 0 THEN 'nsp' WHEN GROUPING(h.ManufacturerId) = 0 THEN 'manufacturer'
@@ -17,10 +22,10 @@ SELECT CASE WHEN GROUPING(h.NspId) = 0 THEN 'nsp' WHEN GROUPING(h.ManufacturerId
        SUM(RIGHT_SHIFT(h.EligMask, @Bit) & 1)          AS Expected,
        SUM(RIGHT_SHIFT(h.CommMask, @Bit) & 1)          AS Communicating,
        COUNT(DISTINCT h.BuildingKey)                   AS Buildings
-FROM sm.Meter m WITH (INDEX (SIX_Meter_Geom))
-JOIN sm.MeterHealth h ON h.MeterSk = m.MeterSk
+FROM sm.MeterHealth h
 LEFT JOIN sm.Nsp n ON n.NspId = h.NspId
 LEFT JOIN sm.Manufacturer f ON f.ManufacturerId = h.ManufacturerId
-WHERE m.Geom.STIntersects(@Poly) = 1
+WHERE h.Lat BETWEEN @MinY AND @MaxY AND h.Lon BETWEEN @MinX AND @MaxX
+  AND geometry::Point(h.Lon, h.Lat, 4326).STIntersects(@Poly) = 1
 GROUP BY GROUPING SETS ((), (h.NspId), (h.ManufacturerId), (h.HealthClass))
 ORDER BY 1, 3 DESC;

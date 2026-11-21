@@ -7,7 +7,7 @@ internal sealed class MeterReadRepository(ISqlConnectionFactory db) : IMeterRead
 {
     public async Task<IReadOnlyList<MeterSearchRow>> SearchAsync(string prefix, int limit, CancellationToken ct)
     {
-        // Prefix LIKE on the unique MeterId index = index seek (case-insensitive collation).
+        // Prefix LIKE on the unique MeterId index = index seek (varchar parameter, case-insensitive collation).
         const string sql = """
             SELECT TOP (@limit) m.MeterId, m.Address, m.BuildingKey, m.Longitude AS Lon, m.Latitude AS Lat, m.ZoneId
             FROM sm.Meter m
@@ -16,7 +16,7 @@ internal sealed class MeterReadRepository(ISqlConnectionFactory db) : IMeterRead
             """;
         await using var conn = await db.OpenAsync(ct);
         return (await conn.QueryAsync<MeterSearchRow>(new CommandDefinition(sql,
-            new { limit, prefix = SqlText.EscapeLike(prefix) + "%" }, cancellationToken: ct))).AsList();
+            new { limit, prefix = SqlText.Key(SqlText.EscapeLike(prefix) + "%") }, cancellationToken: ct))).AsList();
     }
 
     public async Task<MeterRow?> GetMeterAsync(string meterId, CancellationToken ct)
@@ -31,7 +31,7 @@ internal sealed class MeterReadRepository(ISqlConnectionFactory db) : IMeterRead
             WHERE m.MeterId = @meterId;
             """;
         await using var conn = await db.OpenAsync(ct);
-        return await conn.QuerySingleOrDefaultAsync<MeterRow>(new CommandDefinition(sql, new { meterId }, cancellationToken: ct));
+        return await conn.QuerySingleOrDefaultAsync<MeterRow>(new CommandDefinition(sql, new { meterId = SqlText.Key(meterId) }, cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<TimelineRow>> GetTimelineAsync(int meterSk, DateOnly from, DateOnly to, CancellationToken ct)

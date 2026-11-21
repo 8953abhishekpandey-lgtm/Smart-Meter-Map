@@ -19,7 +19,7 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
         p.Add("minRate", minFailureRate);
         p.Add("maxRows", maxBuildings * 4);
         var where = new StringBuilder("s.Lon IS NOT NULL");
-        s.Where(where, p, f);
+        s.Where(where, p, f, health: true);
         if (bbox is { } b)
         {
             where.Append(" AND s.Lat BETWEEN @miny AND @maxy AND s.Lon BETWEEN @minx AND @maxx");
@@ -68,28 +68,48 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
         string sql;
         if (!approximate || f.UsesMeterLevel)
         {
-            // exact meter-level containment; MeterHealth carries every filter column incl. installation date
-            var where = new StringBuilder("m.Geom.STIntersects(@poly) = 1");
-            FleetSource.MeterHealth("h").Where(where, p, f);
+            // Exact meter-level containment on sm.MeterHealth alone (it carries each meter's own Lat/Lon and every filter
+            // column): a batch-mode columnstore range scan on the polygon's envelope, then an exact point-in-polygon test
+            // only for those candidates. Sums are aggregated once by (NSP, make, health) and the grouping sets are taken
+            // over that tiny result; the distinct building count is a separate scalar. (Driving this through the spatial
+            // index, or putting COUNT(DISTINCT) inside the grouping sets, re-evaluates the containment per set: a
+            // 380K-meter lasso went from minutes / 1.2 s to ~0.2 s this way.) The columnstore is forced because with a
+            // selective health predicate the optimizer otherwise picks the BuildingKey rowstore index + 380K lookups (3 s).
+            var where = new StringBuilder("""
+                h.Lat BETWEEN @miny AND @maxy AND h.Lon BETWEEN @minx AND @maxx
+                AND geometry::Point(h.Lon, h.Lat, 4326).STIntersects(@poly) = 1
+                """);
+            FleetSource.MeterHealth("h").Where(where, p, f, health: true);
             sql = $"""
                 DECLARE @poly geometry = geometry::STGeomFromText(@wkt, 4326).MakeValid();
-                SELECT {GroupingLabel("h")} AS Breakdown, {GroupingId("h")} AS Id,
-                       COUNT_BIG(*) AS Meters,
-                       {FleetSource.Sum("RIGHT_SHIFT(h.EligMask, @bit) & 1")} AS Expected,
-                       {FleetSource.Sum("RIGHT_SHIFT(h.CommMask, @bit) & 1")} AS Communicating,
-                       COUNT_BIG(DISTINCT h.BuildingKey) AS Buildings,
-                       {FleetSource.Sum("CAST(h.ActiveLast7 AS int)")} AS Last7
-                FROM sm.Meter m WITH (INDEX (SIX_Meter_Geom))
-                JOIN sm.MeterHealth h ON h.MeterSk = m.MeterSk
-                WHERE {where}
-                GROUP BY GROUPING SETS ((), (h.NspId), (h.ManufacturerId), (h.HealthClass));
+                DECLARE @env geometry = @poly.STEnvelope();
+                DECLARE @minx float = @env.STPointN(1).STX, @miny float = @env.STPointN(1).STY,
+                        @maxx float = @env.STPointN(3).STX, @maxy float = @env.STPointN(3).STY;
+                DECLARE @buildings bigint = (SELECT COUNT_BIG(DISTINCT h.BuildingKey) FROM sm.MeterHealth h WITH (INDEX (CCI_MeterHealth)) WHERE {where});
+                WITH c AS (
+                    SELECT h.NspId, h.ManufacturerId, h.HealthClass,
+                           COUNT_BIG(*) AS Meters,
+                           {FleetSource.Sum("RIGHT_SHIFT(h.EligMask, @bit) & 1")} AS Expected,
+                           {FleetSource.Sum("RIGHT_SHIFT(h.CommMask, @bit) & 1")} AS Communicating,
+                           {FleetSource.Sum("CAST(h.ActiveLast7 AS int)")} AS Last7
+                    FROM sm.MeterHealth h WITH (INDEX (CCI_MeterHealth))
+                    WHERE {where}
+                    GROUP BY h.NspId, h.ManufacturerId, h.HealthClass
+                )
+                SELECT {GroupingLabel("c")} AS Breakdown, {GroupingId("c")} AS Id,
+                       ISNULL(SUM(c.Meters), 0) AS Meters, ISNULL(SUM(c.Expected), 0) AS Expected,
+                       ISNULL(SUM(c.Communicating), 0) AS Communicating,
+                       IIF(GROUPING_ID(c.NspId, c.ManufacturerId, c.HealthClass) = 7, ISNULL(@buildings, 0), 0) AS Buildings,
+                       ISNULL(SUM(c.Last7), 0) AS Last7
+                FROM c
+                GROUP BY GROUPING SETS ((), (c.NspId), (c.ManufacturerId), (c.HealthClass));
                 """;
         }
         else
         {
             var s = FleetSource.Building(f, "h");
             var where = new StringBuilder("1 = 1");
-            s.Where(where, p, f);
+            s.Where(where, p, f, health: true);
             sql = $"""
                 DECLARE @poly geometry = geometry::STGeomFromText(@wkt, 4326).MakeValid();
                 DECLARE @env geometry = @poly.STEnvelope();
@@ -125,7 +145,7 @@ internal sealed class AnalyticsToolsRepository(ISqlConnectionFactory db) : IAnal
         p.Add("strong", minStrongSuccess); p.Add("weak", minWeakFailure); p.Add("minMeters", minMetersPerNsp);
         p.Add("offset", offset); p.Add("take", take);
         var where = new StringBuilder("b.NspCount >= 2");
-        s.Where(where, p, f, nsp: false);
+        s.Where(where, p, f, nsp: false, health: true);
         var sql = $"""
             WITH bn AS (
                 SELECT s.BuildingKey, s.NspId,

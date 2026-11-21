@@ -60,9 +60,14 @@ internal sealed class FleetSource
         ? $"CAST(ISNULL(ROUND(SUM(CAST({expr} AS float)) / @days, 0), 0) AS bigint)"
         : Sum(expr);
 
-    /// <summary>Appends dimension (and, on meter level, installation-date) predicates.</summary>
-    public void Where(StringBuilder sql, DynamicParameters p, FleetFilter f, bool zone = true, bool nsp = true, bool manufacturer = true)
+    /// <summary>
+    /// Appends dimension (and, on meter level, installation-date) predicates; with <paramref name="health"/> also the
+    /// health quick-filter as a row predicate ("Fail on selected day" is a metric, not a row filter).
+    /// </summary>
+    public void Where(StringBuilder sql, DynamicParameters p, FleetFilter f, bool zone = true, bool nsp = true, bool manufacturer = true,
+        bool health = false)
     {
+        if (health && f.Health != HealthFilter.TodayFail && f.Health != HealthFilter.All) sql.Append($" AND {Health(f.Health)}");
         if (zone && f.ZoneIds.Count > 0) { sql.Append($" AND {A}.ZoneId IN @zoneIds"); p.Add("zoneIds", f.ZoneIds.ToArray()); }
         if (nsp && f.NspIds.Count > 0) { sql.Append($" AND {A}.NspId IN @nspIds"); p.Add("nspIds", f.NspIds.ToArray()); }
         if (manufacturer && f.ManufacturerIds.Count > 0) { sql.Append($" AND {A}.ManufacturerId IN @mfrIds"); p.Add("mfrIds", f.ManufacturerIds.ToArray()); }
@@ -82,6 +87,13 @@ internal sealed class FleetSource
 
 internal static class SqlText
 {
+    /// <summary>
+    /// Parameter for the <c>varchar</c> key columns (MeterId, BuildingKey). Dapper sends .NET strings as nvarchar; comparing
+    /// a varchar column with an nvarchar value under a SQL collation forces CONVERT_IMPLICIT on the column, which turns
+    /// every index seek on 15M meters into a scan.
+    /// </summary>
+    public static DbString Key(string? value) => new() { Value = value, IsAnsi = true };
+
     /// <summary>Escapes LIKE wildcards in user input (SQL Server bracket syntax).</summary>
     public static string EscapeLike(string value) =>
         value.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]");

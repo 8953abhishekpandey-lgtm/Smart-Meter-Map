@@ -19,7 +19,7 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
             FROM sm.Building WHERE BuildingKey = @key;
             """;
         await using var conn = await db.OpenAsync(ct);
-        return await conn.QuerySingleOrDefaultAsync<BuildingRow>(new CommandDefinition(sql, new { key = buildingKey }, cancellationToken: ct));
+        return await conn.QuerySingleOrDefaultAsync<BuildingRow>(new CommandDefinition(sql, new { key = SqlText.Key(buildingKey) }, cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<BuildingSliceRow>> GetSlicesAsync(string buildingKey, CancellationToken ct)
@@ -112,13 +112,13 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
     {
         const string sql = "SELECT MeterId, CommDays FROM sm.MeterHealth WHERE BuildingKey = @key;";
         await using var conn = await db.OpenAsync(ct);
-        return (await conn.QueryAsync<MeterCommRow>(new CommandDefinition(sql, new { key = buildingKey }, cancellationToken: ct))).AsList();
+        return (await conn.QueryAsync<MeterCommRow>(new CommandDefinition(sql, new { key = SqlText.Key(buildingKey) }, cancellationToken: ct))).AsList();
     }
 
     private static (string Where, DynamicParameters P) MetersWhere(string buildingKey, DaySelection day, string? search, MeterStatusFilter status)
     {
         var p = new DynamicParameters();
-        p.Add("key", buildingKey);
+        p.Add("key", SqlText.Key(buildingKey));
         p.Add("bit", day.Bit);
         var where = new StringBuilder("h.BuildingKey = @key");
         if (!string.IsNullOrWhiteSpace(search))
@@ -126,7 +126,7 @@ internal sealed class BuildingReadRepository(ISqlConnectionFactory db) : IBuildi
             var term = SqlText.EscapeLike(search.Trim());
             // meter id prefix, or address contains (address lives on sm.Meter: correlated seek per candidate row)
             where.Append(" AND (h.MeterId LIKE @prefix OR EXISTS (SELECT 1 FROM sm.Meter ma WHERE ma.MeterSk = h.MeterSk AND ma.Address LIKE @contains))");
-            p.Add("prefix", term + "%");
+            p.Add("prefix", SqlText.Key(term + "%"));
             p.Add("contains", "%" + term + "%");
         }
         where.Append(status switch
