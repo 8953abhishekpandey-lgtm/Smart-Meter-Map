@@ -104,6 +104,9 @@ BEGIN
     INTO #Site
     FROM #SiteRand r
     CROSS APPLY (SELECT TOP (1) c.* FROM #Zone c WHERE c.Cum >= r.Rz ORDER BY c.Cum) z;
+    -- index the temp tables: without them the optimiser under-estimates the GENERATE_SERIES expansion and
+    -- picks nested loops over heaps (quadratic at millions of meters)
+    CREATE UNIQUE CLUSTERED INDEX CX_Site ON #Site (SiteNo);
 
     -- ------------------------------------------------------------ outage pockets
     SELECT p.PocketId, z.Lon + p.DLon AS Lon, z.Lat + p.DLat AS Lat, p.RadiusKm, p.Nsp, p.Factor,
@@ -130,6 +133,7 @@ BEGIN
     INTO #MeterRand
     FROM #Site s
     CROSS APPLY GENERATE_SERIES(1, s.MeterCount) AS u;
+    CREATE UNIQUE CLUSTERED INDEX CX_MeterRand ON #MeterRand (SiteNo, UnitNo);
 
     ;WITH n AS (
         SELECT r.*, s.ZoneId, s.ZoneName, s.Lat AS SLat, s.Lon AS SLon, s.IsTower, s.DomNsp, s.DomMfr,
@@ -157,6 +161,7 @@ BEGIN
     INTO #M1
     FROM n
     WHERE n.N <= @Meters;
+    CREATE UNIQUE CLUSTERED INDEX CX_M1 ON #M1 (N);
 
     SELECT m.*,
            CASE WHEN m.DeadSite = 1 OR m.Rrel < 0.02 THEN 0.0

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { SmartMeterApi } from '../../core/api/smart-meter-api';
 import { FilterStore } from '../../core/state/filter.store';
@@ -61,9 +61,13 @@ export class FilterBar {
   });
   protected readonly opts = computed(() => (this.options.hasValue() ? this.options.value() : undefined));
 
+  /** "Custom…" chosen but no dates entered yet. */
+  private readonly customMode = signal(false);
+
   protected readonly presetValue = computed(() => {
     const from = this.store.installedFrom();
-    if (!from && !this.store.installedTo()) return '';
+    if (!from && !this.store.installedTo()) return this.customMode() ? 'custom' : '';
+    if (this.customMode()) return 'custom';
     const end = this.meta.window()?.end;
     if (end && !this.store.installedTo()) {
       const days = Math.round((Date.parse(end) - Date.parse(from!)) / 86_400_000);
@@ -74,6 +78,7 @@ export class FilterBar {
 
   protected preset(v: string): void {
     const end = this.meta.window()?.end;
+    this.customMode.set(v === 'custom');
     if (!v) { this.store.installedFrom.set(null); this.store.installedTo.set(null); return; }
     if (v === 'custom' || !end) return;
     const d = new Date(end + 'T00:00:00');
