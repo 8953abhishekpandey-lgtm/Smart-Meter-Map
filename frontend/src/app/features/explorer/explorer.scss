@@ -22,4 +22,5 @@
   tr.click { cursor: pointer; } tr.click:hover td { background: var(--hover); }
   a { color: var(--accent); text-decoration: none; } }
 .virt { margin-left: 6px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--chip); color: var(--ink-secondary); }
-.map-link { float: right; color: var(--accent); text-decoration: none; font-size: 13px; }
+.top-bar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.map-link { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap; }

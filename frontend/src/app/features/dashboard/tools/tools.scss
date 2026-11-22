@@ -3,9 +3,9 @@ h3 { font-size: 15px; margin: 0 0 4px; }
 h4 { font-size: 13px; margin: 12px 0 4px; }
 .hint { font-size: 12px; color: var(--ink-muted); margin: 0 0 10px; }
 .meta { font-size: 12px; color: var(--ink-secondary); margin: 8px 0; }
-.form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-secondary); }
-  input, select { height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: inherit; background: var(--surface); } }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;   // minmax(0, ...) lets inputs shrink instead of overflowing the panel
+  label { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 12px; color: var(--ink-secondary); }
+  input, select { width: 100%; min-width: 0; box-sizing: border-box; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: inherit; background: var(--surface); } }
 .actions { display: flex; gap: 6px; grid-column: 1 / -1; margin: 4px 0;
   button { height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 10px; background: var(--surface); cursor: pointer; font: inherit; }
   button.primary { background: var(--ink-primary); border-color: var(--ink-primary); color: #fff; }
@@ -20,7 +20,7 @@ h4 { font-size: 13px; margin: 12px 0 4px; }
 .swap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; margin-top: 4px;
   .weak { color: #a32828; font-weight: 600; } .strong { color: #006300; font-weight: 600; } .arrow { color: var(--ink-muted); } }
 .empty { color: var(--ink-muted); font-size: 13px; padding: 12px 0; list-style: none; }
-.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px;
+.summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px;
   div { background: var(--plane); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; font-size: 13px; }
   .k { font-size: 11px; color: var(--ink-muted); } }
 .mini { width: 100%; border-collapse: collapse; font-size: 12px;

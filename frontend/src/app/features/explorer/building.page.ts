@@ -13,10 +13,12 @@ import { Crumbs } from './crumbs';
   imports: [BuildingDetail, Crumbs, RouterLink],
   template: `
     <div class="wrap narrow">
-      <sm-crumbs [items]="crumbs()" />
-      @if (b(); as x) {
-        @if (x.lon != null) { <a class="map-link" [routerLink]="['/dashboard']" [queryParams]="{ building: x.buildingKey, lon: x.lon, lat: x.lat }">Show on map ↗</a> }
-      }
+      <div class="top-bar">
+        <sm-crumbs [items]="crumbs()" />
+        @if (b(); as x) {
+          @if (x.lon != null) { <a class="map-link" [routerLink]="['/dashboard']" [queryParams]="{ building: x.buildingKey, lon: x.lon, lat: x.lat }">Show on map ↗</a> }
+        }
+      </div>
       <sm-building-detail [buildingKey]="buildingKey()" (meterSelected)="openMeter($event)" />
     </div>
   `,
