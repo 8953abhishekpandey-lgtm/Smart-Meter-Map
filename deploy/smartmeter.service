@@ -20,6 +20,8 @@ KillSignal=SIGINT
 TimeoutStopSec=60
 NoNewPrivileges=true
 ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
 ReadWritePaths=/var/smartmeter
 
 [Install]

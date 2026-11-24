@@ -324,7 +324,7 @@ All under `/api/v1`. Global filters as query string: `zone=1&zone=4&nsp=2&mfr=3&
 | `POST analytics/polygon` | `{geometry: GeoJSON Polygon}` → meters, health, NSP & manufacturer breakdowns |
 | `GET analytics/sim-switch?minStrongSuccessPct=85&minWeakFailurePct=70&basis=window` | SIM swap candidates |
 | `POST ingestion/uploads` · `PUT …/chunks/{n}` · `POST …/complete` · `POST ingestion/files` | uploads |
-| `GET ingestion/jobs[/{id}[/errors]]` · `GET ingestion/templates/{cis|mdm}` · `POST admin/refresh` | jobs, templates, refresh |
+| `GET ingestion/jobs[/{id}[/errors]]` · `GET ingestion/templates/{cis|mdm}` · `POST ingestion/refresh` | jobs, templates, refresh |
 | `GET /health` · `/health/ready` · `/health/live` | health (SQL Server, Redis, analytics freshness) |
 | SignalR `/hubs/live` | `jobUpdated`, `dataVersionChanged` |
 
