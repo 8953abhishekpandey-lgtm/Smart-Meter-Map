@@ -57,8 +57,13 @@ installation-date range (new meter lots), date picker; health quick-filters **Al
 breakdown and convex hulls drawn on the map), **Lasso / polygon / box selection** (exact meter-level spatial
 containment, independent of building ids) and the **SIM / NSP switch opportunity finder**.
 
-**Ingestion**: streaming Excel (`.xlsx/.xlsb/.xls`, multi-worksheet) and CSV upload, chunked & resumable, row-level
-validation report, set-based merge, live progress over SignalR, automatic coalesced analytics refresh.
+**Ingestion**: a **watch folder** that imports every Excel/CSV file copied into it (CIS first, daily files in date
+order; the day may come from the file name, corrected files are re-imported), plus streaming upload of Excel
+(`.xlsx/.xlsb/.xls`, multi-worksheet) and CSV, chunked & resumable, row-level validation report, set-based merge,
+live progress over SignalR, automatic coalesced analytics refresh.
+
+**Date range**: any From–To range inside the 30-day window combines the daily data of those days; KPIs, map colours,
+zone/building lists, drill-downs, clusters and SIM switch show the average day with exact (meter-day) percentages.
 
 ---
 
@@ -157,7 +162,7 @@ cd ../backend
 dotnet user-secrets --project src/SmartMeter.Api set "ConnectionStrings:SmartMeterDb" \
   "Server=localhost,1433;Database=SmartMeterDb;User Id=smartmeter_app;Password=<app password>;TrustServerCertificate=True"
 dotnet run --project src/SmartMeter.Api --launch-profile http
-dotnet test                                   # 61 unit tests
+dotnet test                                   # unit tests
 
 # 3. Web  (http://localhost:4200, proxies /api and /hubs to :5080)
 cd ../frontend && npm ci && npm start
@@ -280,7 +285,10 @@ UPDATE sm.AnalyticsState SET ConfigWindowDays = 31;     -- 30/31-day window (app
 
 ## 6. Data ingestion
 
-UI: **Data ingestion** page (drag & drop). API: chunked or single-shot.
+Three ways in: the **watch folder** (`Ingestion:WatchFolder`: copy files into a folder, they are imported within a
+minute; the Data ingestion page shows each file's state and has *Scan now*), the **Data ingestion** page (drag &
+drop), or the API (chunked or single-shot). Daily MDM files may omit `LogDate` when the day is in the file or folder
+name (`mdm_2026-11-20.xlsx`, `comm 20-11-2026.xlsx`, `mdm/20261120/…`).
 
 | File | Required columns (aliases recognised, case/space-insensitive) | Optional |
 |---|---|---|
@@ -311,7 +319,8 @@ curl http://localhost:8080/api/v1/ingestion/jobs/{id}/errors     # CSV error rep
 
 ## 7. API reference
 
-All under `/api/v1`. Global filters as query string: `zone=1&zone=4&nsp=2&mfr=3&installedFrom=2026-11-01&installedTo=…&health=dead|intermittent|allDay|last7Days|todayFail&date=2026-11-15&metric=day|window`.
+All under `/api/v1`. Global filters as query string: `zone=1&zone=4&nsp=2&mfr=3&installedFrom=2026-11-01&installedTo=…&health=dead|intermittent|allDay|last7Days|todayFail&date=2026-11-15&metric=day|window&from=2026-11-01&to=2026-11-10`
+(`from`/`to` = the days averaged by `metric=window`; default: the whole window).
 
 | Method & path | Purpose |
 |---|---|
@@ -328,6 +337,7 @@ All under `/api/v1`. Global filters as query string: `zone=1&zone=4&nsp=2&mfr=3&
 | `GET analytics/sim-switch?minStrongSuccessPct=85&minWeakFailurePct=70&basis=window` | SIM swap candidates |
 | `POST ingestion/uploads` · `PUT …/chunks/{n}` · `POST …/complete` · `POST ingestion/files` | uploads |
 | `GET ingestion/jobs[/{id}[/errors]]` · `GET ingestion/templates/{cis|mdm}` · `POST ingestion/refresh` | jobs, templates, refresh |
+| `GET ingestion/watch-folder` · `POST ingestion/watch-folder/scan` | watch folder state per file · scan now |
 | `GET /health` · `/health/ready` · `/health/live` | health (SQL Server, Redis, analytics freshness) |
 | SignalR `/hubs/live` | `jobUpdated`, `dataVersionChanged` |
 

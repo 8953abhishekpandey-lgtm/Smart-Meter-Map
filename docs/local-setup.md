@@ -92,35 +92,67 @@ the browser. Breakpoints work in both the C# and the TypeScript code. Sign-in is
 
 ## 6. Load your Excel files
 
-1. Copy your files into the project's `data` folder. Put **`cis`** or **`master`** in the name of customer-master
-   files and **`mdm`**, **`comm`** or **`log`** in the name of daily communication files, for example
-   `cis_master_nov.xlsx` and `mdm_comm_2026-11-20.xlsx`. Files in `data` are never committed to git.
-2. With the app running, run the task **data: upload files in ./data**. It loads CIS files first, then MDM files,
-   shows progress and the number of rows read, valid and rejected, and writes `<file>.errors.csv` next to any file
-   with rejected rows.
-3. The dashboards refresh automatically when the last job finishes (a few seconds for small files).
+The project's `data` folder is a **watch folder** while the app runs from VS Code: copy files into it and they are
+imported automatically within about a minute. Files in `data` are never committed to git.
 
-Or drag the files onto the **Data ingestion** page in the browser.
+1. Put **`cis`** or **`master`** in the name (or folder) of customer-master files and **`mdm`**, **`comm`** or
+   **`log`** in daily communication files. A daily file can carry its day only in its name, so a sheet with just
+   *Meter No* and *Status* columns is fine:
+
+    ```
+    data/cis/cis_master.xlsx
+    data/mdm/mdm_2026-11-18.xlsx
+    data/mdm/mdm_2026-11-19.xlsx
+    data/mdm/comm 20-11-2026.xlsx
+    ```
+
+2. Open **Data ingestion** in the browser. The *Watch folder* panel lists every file as imported, waiting, failed (with
+   the reason) or "name not recognised", and **Scan now** imports immediately instead of waiting for the next minute.
+3. Master files are imported first, then daily files in date order. Saving a corrected file imports it again.
+4. The dashboards refresh automatically after each scan that imported something.
+
+You can also drag a single file onto the Data ingestion page, or upload a whole folder to any server with the task
+**data: upload files in ./data** (`scripts/upload-folder.ps1`).
 
 **Columns.** CIS master: `MeterId` is required; `BuildingId`, `Latitude`, `Longitude`, `Address`, `NSP`,
-`Manufacturer`, `Zone`, `InstallationDate`, `DtId` are optional. MDM logs: `MeterId`, `LogDate`, `IsCommunicating`
-(1/0, true/false, yes/no, success/fail). Common alternative headers are recognised (*Meter No*, *MSN*, *SIM Operator*,
-*Make*, *Circle*, *Area*, *Read Date*, …). Download empty templates from the Data ingestion page.
+`Manufacturer`, `Zone`, `InstallationDate`, `DtId` are optional. MDM logs: `MeterId`, `IsCommunicating` (1/0,
+true/false, yes/no, success/fail, Communicating / Non-Communicating, online/offline) and `LogDate` unless the day is in
+the file name. Common alternative headers are recognised (*Meter No*, *MSN*, *SIM Operator*, *Make*, *Circle*,
+*Area*, *Read Date*, *Comm Status*, …). Download empty templates from the Data ingestion page.
 
 **Typical rejections** (see the error report): coordinates outside India (the allowed area is
 `Ingestion:ServiceArea` in `appsettings.json`), dates in an unknown format, and MDM rows for meters that are not in
 the CIS master yet; load the CIS file first.
 
-## 7. Everyday tasks
+**Your own folder.** To watch another folder (for example where the MDM system drops its daily export), set it in
+`backend/src/SmartMeter.Api/appsettings.Development.json`, or on a server in `appsettings.Production.json`:
+
+```json
+"Ingestion": { "WatchFolder": "D:\\MDM\\daily", "WatchFolderScanMinutes": 1 }
+```
+
+The API only reads the files; it never moves or deletes them. On a server, give the service account read access to
+the folder.
+
+## 7. Combine several days (date range)
+
+On the dashboard switch **Selected day** to **Date range** and pick **From** and **To**, or a quick pick (*Last day*,
+*Last 7 days*, *Last 14 days*, *All 30 days*). The KPI cards, map colours, zone and building lists, the building
+drill-down, the Cluster Finder and the SIM-switch finder then show the **average day of that range**, built from the
+daily files of every day in it. Percentages are exact (counted over all meter-days in the range). The range must lie
+inside the analytics window, the latest 30 days of loaded data. The browser address keeps the range, so a link opens the
+same view.
+
+## 8. Everyday tasks
 
 | Task (Terminal → Run Task…) | Does |
 | --- | --- |
-| api: build / api: test | build the .NET solution / run its 61 unit tests |
+| api: build / api: test | build the .NET solution / run its unit tests |
 | web: test | run the web app's unit tests |
 | db: refresh analytics | rebuild the dashboard tables now (normally automatic) |
 | release: build win-x64 zip | the deployable zip for a Windows server (see the README, section 2) |
 
-## 8. When something does not work
+## 9. When something does not work
 
 | Symptom | Fix |
 | --- | --- |
