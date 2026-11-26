@@ -1,0 +1,15 @@
+{
+  // the platform's solution (the root MeterMap.slnx is the older app)
+  "dotnet.defaultSolution": "backend/SmartMeter.slnx",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.angular": true,
+    "artifacts": true
+  },
+  "typescript.tsdk": "frontend/node_modules/typescript/lib"
+}

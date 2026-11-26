@@ -488,3 +488,7 @@ frontend/dist/
 frontend/.angular/
 artifacts/
 backend/src/SmartMeter.Api/wwwroot/
+
+# local data files (never committed)
+/data/*
+!/data/README.md

@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (.NET, http://localhost:5080)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "api: build",
+      "program": "${workspaceFolder}/backend/src/SmartMeter.Api/bin/Debug/net10.0/SmartMeter.Api.dll",
+      "cwd": "${workspaceFolder}/backend/src/SmartMeter.Api",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5080"
+      },
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Web app (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "preLaunchTask": "web: start",
+      "url": "http://localhost:4200",
+      "webRoot": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Web app (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "preLaunchTask": "web: start",
+      "url": "http://localhost:4200",
+      "webRoot": "${workspaceFolder}/frontend"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack: API + web app (Edge)",
+      "configurations": ["API (.NET, http://localhost:5080)", "Web app (Edge)"],
+      "stopAll": true
+    },
+    {
+      "name": "Full stack: API + web app (Chrome)",
+      "configurations": ["API (.NET, http://localhost:5080)", "Web app (Chrome)"],
+      "stopAll": true
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  // VS Code offers to install these when the folder is opened.
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+    "angular.ng-template",
+    "ms-mssql.mssql",
+    "ms-vscode.powershell"
+  ]
+}

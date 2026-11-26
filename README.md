@@ -141,6 +141,9 @@ serialise database and app deployments.
 
 ## 3. Local development
 
+> **Step-by-step for Windows + VS Code** (install, database, F5 to run, loading your Excel files): see
+> [`docs/local-setup.md`](docs/local-setup.md). The repository ships VS Code tasks and launch configurations in `.vscode/`.
+
 Prerequisites: .NET 10 SDK, Node 22, SQL Server 2022+ (Developer edition is free) reachable on 1433, `sqlcmd` or SSMS.
 
 ```bash
@@ -418,7 +421,9 @@ backend/         .NET 10 solution (Domain / Application / Infrastructure / Api +
 frontend/        Angular 22 + OpenLayers + ECharts app
 deploy/          release build scripts, Windows Service + systemd installers, production settings template
 loadtest/        k6 scenarios
-scripts/         post-deployment smoke test
+scripts/         post-deployment smoke test, folder upload helper (upload-folder.ps1)
+data/            your own Excel/CSV files (git-ignored)
+.vscode/         VS Code tasks, launch configurations, recommended extensions
 docs/            performance & scaling notes
 .gitlab-ci.yml   company GitLab pipeline (shell runners);  .github/workflows/ci.yml  build + test only
 src/, tests/, MeterMap.slnx   legacy MeterMap.NET application (unchanged)

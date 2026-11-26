@@ -1,0 +1,105 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "db: deploy (empty database)",
+      "detail": "Creates or updates SmartMeterDb with your Windows login; no demo data",
+      "type": "shell",
+      "command": "pwsh",
+      "windows": { "command": "powershell" },
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/database/deploy.ps1", "-Server", "${input:sqlServer}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "db: deploy + 300K demo meters",
+      "detail": "Same, plus a synthetic fleet to explore the screens (only if the database has no meters yet)",
+      "type": "shell",
+      "command": "pwsh",
+      "windows": { "command": "powershell" },
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/database/deploy.ps1", "-Server", "${input:sqlServer}", "-SeedDemoMeters", "300000"],
+      "problemMatcher": []
+    },
+    {
+      "label": "db: refresh analytics",
+      "detail": "Rebuilds the dashboard tables now (normally automatic after every upload)",
+      "type": "shell",
+      "command": "sqlcmd",
+      "args": ["-S", "${input:sqlServer}", "-E", "-C", "-d", "SmartMeterDb", "-t", "0", "-Q", "SET NOCOUNT ON; EXEC sm.usp_RefreshAnalytics;"],
+      "problemMatcher": []
+    },
+    {
+      "label": "data: upload files in ./data",
+      "detail": "Uploads every Excel/CSV file in ./data to the running API (CIS first, then MDM)",
+      "type": "shell",
+      "command": "pwsh",
+      "windows": { "command": "powershell" },
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/upload-folder.ps1", "-Folder", "${workspaceFolder}/data"],
+      "problemMatcher": []
+    },
+    {
+      "label": "api: build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/backend/SmartMeter.slnx", "/property:GenerateFullPaths=true", "/consoleloggerparameters:NoSummary"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "api: test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/backend/SmartMeter.slnx"],
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "web: install packages",
+      "type": "shell",
+      "command": "npm ci",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "web: start",
+      "detail": "Angular dev server on http://localhost:4200 (proxies /api and /hubs to the API on :5080)",
+      "type": "shell",
+      "command": "npm start",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "angular",
+        "pattern": { "regexp": "^\\s*✘ \\[ERROR\\] (.*)$", "message": 1 },
+        "background": {
+          "activesBegin": true,
+          "beginsPattern": "(Building|Changes detected|Initial chunk files)",
+          "endsPattern": "(Application bundle generation (complete|failed)|Local:)"
+        }
+      }
+    },
+    {
+      "label": "web: test",
+      "type": "shell",
+      "command": "npx ng test --watch=false",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "release: build win-x64 zip",
+      "detail": "artifacts/smartmeter-win-x64.zip, ready for the Windows Service installer",
+      "type": "shell",
+      "command": "pwsh",
+      "windows": { "command": "powershell" },
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/deploy/build-release.ps1", "-Rid", "win-x64"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "sqlServer",
+      "type": "promptString",
+      "description": "SQL Server instance (as in SSMS 'Server name'), e.g. localhost, localhost\\SQLEXPRESS or sqlserver01,1433",
+      "default": "localhost"
+    }
+  ]
+}
