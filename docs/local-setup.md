@@ -5,6 +5,20 @@ loaded with your own Excel files. Allow about 30 minutes the first time (mostly 
 
 ## 1. Install the tools (once)
 
+**Quickest: one script installs everything on drive D:** (SQL Server 2022 Developer in `D:\SQLServer`; sqlcmd, the
+.NET 10 SDK and Node.js 22 in `D:\Tools`, added to the Windows PATH). Open PowerShell with **Run as administrator**:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+D:\Smart-Meter-Map\scripts\setup-windows-dev.ps1          # add -Root E:\ for another drive, -SkipSqlServer for tools only
+```
+
+It skips anything already installed and ends with a check of every tool. Then open a **new** PowerShell / VS Code window
+so the PATH changes apply. If your network blocks the SQL Server download, download *SQL Server 2022 Developer* from
+https://www.microsoft.com/sql-server/sql-server-downloads and run the script again with `-SqlInstaller <path to SQL2022-SSEI-Dev.exe>`.
+
+Or install the tools yourself:
+
 | Tool | Version | How to get it (Windows) |
 | --- | --- | --- |
 | Git | any | `winget install Git.Git` |
