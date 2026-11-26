@@ -5,7 +5,8 @@
       Set-ExecutionPolicy -Scope Process Bypass -Force
       D:\Smart-Meter-Map\scripts\setup-windows-dev.ps1
 
-  Installs (anything already there is skipped, so it is safe to run again):
+  Installs (anything already there is reused or skipped, so it is safe to run again; an existing .NET 10 SDK or a
+  recent enough Node.js is used as it is):
     * SQL Server 2022 Developer edition (free)  -> D:\SQLServer   (default instance, TCP 1433, your Windows login is sysadmin)
     * sqlcmd                                     -> D:\Tools\sqlcmd
     * .NET 10 SDK                                -> D:\Tools\dotnet
@@ -18,11 +19,13 @@
   Options:
     -Root E:\                       use another drive
     -SkipSqlServer                  only the developer tools
+    -DotnetOnD                      put .NET 10 under D:\Tools\dotnet even when .NET is already installed elsewhere
     -SqlInstaller <path>            use a SQL2022-SSEI-Dev.exe you downloaded yourself (if the automatic download is blocked)
 #>
 param(
     [string]$Root = "D:\",
     [switch]$SkipSqlServer,
+    [switch]$DotnetOnD,
     [string]$SqlInstaller = ""
 )
 $ErrorActionPreference = "Stop"
@@ -65,38 +68,71 @@ else {
 Add-ToMachinePath $sqlcmdDir
 
 # ---------------------------------------------------------------- .NET 10 SDK
+# An existing .NET install is reused: with a 10.x SDK nothing is installed; without one, .NET 10 is added NEXT TO it
+# (so other projects keep their runtimes). Only a PC without .NET (or -DotnetOnD) gets it under D:\Tools\dotnet.
 Write-Host ">> .NET 10 SDK"
 $dotnetDir = Join-Path $tools "dotnet"
-$dotnetExe = Join-Path $dotnetDir "dotnet.exe"
-$hasSdk10 = (Test-Path $dotnetExe) -and (@(& $dotnetExe --list-sdks) -match '^10\.').Count -gt 0
-if ($hasSdk10) { Write-Host "   already installed" }
-else {
-    $installer = Join-Path $downloads "dotnet-install.ps1"
-    Get-File "https://dot.net/v1/dotnet-install.ps1" $installer
-    & $installer -Channel 10.0 -InstallDir $dotnetDir -NoPath
+$existingDotnet = Get-Command dotnet.exe -ErrorAction SilentlyContinue | Where-Object { $_.Source -notlike "$dotnetDir*" } | Select-Object -First 1
+$existingSdks = if ($existingDotnet) { @(& $existingDotnet.Source --list-sdks 2>$null) } else { @() }
+$sdk10 = @($existingSdks -match '^10\.')
+if ($sdk10.Count -gt 0) {
+    Write-Host "   already installed: $($sdk10[-1].Split(' ')[0]) in $(Split-Path $existingDotnet.Source) - nothing to do"
 }
-[Environment]::SetEnvironmentVariable("DOTNET_ROOT", $dotnetDir, "Machine"); $env:DOTNET_ROOT = $dotnetDir
+elseif ($existingDotnet -and -not $DotnetOnD -and (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+    Write-Host "   .NET found in $(Split-Path $existingDotnet.Source) but without a 10.x SDK: adding .NET 10 next to it"
+    winget install --id Microsoft.DotNet.SDK.10 --exact --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) { throw "winget could not install the .NET 10 SDK (exit code $LASTEXITCODE). Run again with -DotnetOnD to put it under $dotnetDir instead." }
+}
+else {
+    $dotnetExe = Join-Path $dotnetDir "dotnet.exe"
+    if ((Test-Path $dotnetExe) -and @(& $dotnetExe --list-sdks | Where-Object { $_ -match '^10\.' }).Count -gt 0) { Write-Host "   already installed in $dotnetDir" }
+    else {
+        $installer = Join-Path $downloads "dotnet-install.ps1"
+        Get-File "https://dot.net/v1/dotnet-install.ps1" $installer
+        & $installer -Channel 10.0 -InstallDir $dotnetDir -NoPath
+    }
+    [Environment]::SetEnvironmentVariable("DOTNET_ROOT", $dotnetDir, "Machine"); $env:DOTNET_ROOT = $dotnetDir
+    $nuget = Join-Path $tools "nuget-packages"
+    [Environment]::SetEnvironmentVariable("NUGET_PACKAGES", $nuget, "Machine"); $env:NUGET_PACKAGES = $nuget
+    Add-ToMachinePath $dotnetDir -First        # first, so it wins over an older C:\Program Files\dotnet
+    if ($existingDotnet) {
+        Write-Warning "$dotnetDir now comes first on PATH. Projects that need older .NET runtimes from $(Split-Path $existingDotnet.Source) may need those runtimes installed under $dotnetDir too."
+    }
+}
 [Environment]::SetEnvironmentVariable("DOTNET_CLI_TELEMETRY_OPTOUT", "1", "Machine")
-$nuget = Join-Path $tools "nuget-packages"
-[Environment]::SetEnvironmentVariable("NUGET_PACKAGES", $nuget, "Machine"); $env:NUGET_PACKAGES = $nuget
-Add-ToMachinePath $dotnetDir -First        # first, so it wins over an older C:\Program Files\dotnet
 
-# ---------------------------------------------------------------- Node.js 22 LTS
-Write-Host ">> Node.js 22 LTS"
-$nodeDir = Join-Path $tools "node"
-if (Test-Path (Join-Path $nodeDir "node.exe")) { Write-Host "   already installed" }
-else {
-    $index = Invoke-RestMethod "https://nodejs.org/dist/index.json"     # one array object: enumerate it before filtering
-    $release = $index | Where-Object { $_.version -like "v22.*" -and $_.lts } | Select-Object -First 1
-    if (-not $release) { throw "Could not find a Node.js 22 LTS release on nodejs.org." }
-    $v = $release.version
-    $zip = Join-Path $downloads "node-$v-win-x64.zip"
-    Get-File "https://nodejs.org/dist/$v/node-$v-win-x64.zip" $zip
-    Expand-Archive -Path $zip -DestinationPath $downloads -Force
-    Move-Item -Path (Join-Path $downloads "node-$v-win-x64") -Destination $nodeDir
+# ---------------------------------------------------------------- Node.js
+# The web app (Angular 22) needs Node 22.22.3+ within 22.x, 24.15+ within 24.x, or 26+. A suitable existing Node is reused.
+function Test-NodeVersion([string]$v) {
+    $ver = $null
+    if (-not [version]::TryParse(($v.Trim().TrimStart('v') -replace '[-+].*$', ''), [ref]$ver)) { return $false }
+    return ($ver.Major -eq 22 -and $ver -ge [version]'22.22.3') -or ($ver.Major -eq 24 -and $ver -ge [version]'24.15.0') -or $ver.Major -ge 26
 }
-Add-ToMachinePath $nodeDir -First
-& (Join-Path $nodeDir "npm.cmd") config set cache (Join-Path $tools "npm-cache") --global | Out-Null
+Write-Host ">> Node.js"
+$nodeDir = Join-Path $tools "node"
+$existingNode = Get-Command node.exe -ErrorAction SilentlyContinue | Where-Object { $_.Source -notlike "$nodeDir*" } | Select-Object -First 1
+$existingNodeVersion = if ($existingNode) { [string](& $existingNode.Source --version) } else { "" }
+if ($existingNode -and (Test-NodeVersion $existingNodeVersion)) {
+    Write-Host "   already installed: $existingNodeVersion in $(Split-Path $existingNode.Source) - nothing to do"
+}
+else {
+    if ($existingNode) { Write-Host "   $existingNodeVersion in $(Split-Path $existingNode.Source) is too old for Angular 22: adding Node.js 22 LTS under $nodeDir" }
+    $nodeExe = Join-Path $nodeDir "node.exe"
+    if ((Test-Path $nodeExe) -and (Test-NodeVersion ([string](& $nodeExe --version)))) { Write-Host "   already installed in $nodeDir" }
+    else {
+        if (Test-Path $nodeDir) { Remove-Item -Recurse -Force $nodeDir }
+        $index = Invoke-RestMethod "https://nodejs.org/dist/index.json"     # one array object: enumerate it before filtering
+        $release = $index | Where-Object { $_.version -like "v22.*" -and $_.lts } | Select-Object -First 1
+        if (-not $release) { throw "Could not find a Node.js 22 LTS release on nodejs.org." }
+        $v = $release.version
+        $zip = Join-Path $downloads "node-$v-win-x64.zip"
+        Get-File "https://nodejs.org/dist/$v/node-$v-win-x64.zip" $zip
+        Expand-Archive -Path $zip -DestinationPath $downloads -Force
+        Move-Item -Path (Join-Path $downloads "node-$v-win-x64") -Destination $nodeDir
+    }
+    Add-ToMachinePath $nodeDir -First
+    & (Join-Path $nodeDir "npm.cmd") config set cache (Join-Path $tools "npm-cache") --global | Out-Null
+}
 
 # ---------------------------------------------------------------- SQL Server 2022 Developer
 if ($SkipSqlServer) {
@@ -158,8 +194,10 @@ else {
 # ---------------------------------------------------------------- check
 Write-Host ""
 Write-Host ">> check"
-Write-Host ("   dotnet  {0}" -f (& $dotnetExe --version))
-Write-Host ("   node    {0}" -f (& (Join-Path $nodeDir "node.exe") --version))
+$dn = Get-Command dotnet.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($dn) { Write-Host ("   dotnet  {0}  ({1})" -f (& $dn.Source --version), (Split-Path $dn.Source)) } else { Write-Warning "dotnet: open a new window and run 'dotnet --version'" }
+$nd = Get-Command node.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($nd) { Write-Host ("   node    {0}  ({1})" -f (& $nd.Source --version), (Split-Path $nd.Source)) }
 if (-not $SkipSqlServer) {
     $svc = Get-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue
     if ($svc -and $svc.Status -ne "Running") { Start-Service MSSQLSERVER }
