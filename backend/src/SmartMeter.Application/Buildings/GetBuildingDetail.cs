@@ -30,9 +30,11 @@ public sealed record BuildingDetailDto(
     IReadOnlyList<BreakdownDto> ByManufacturer,
     IReadOnlyList<TrendPointDto> Trend);
 
-public sealed record GetBuildingDetailQuery(string BuildingKey, DateOnly? Date) : IRequest<BuildingDetailDto>, ICacheableQuery
+/// <param name="Metric">Day = figures of <paramref name="Date"/>; Window = average day over From..To (default: the whole window).</param>
+public sealed record GetBuildingDetailQuery(string BuildingKey, DateOnly? Date, MetricMode Metric = MetricMode.Day,
+    DateOnly? From = null, DateOnly? To = null) : IRequest<BuildingDetailDto>, ICacheableQuery
 {
-    public string CacheKey => $"{BuildingKey}|d{Date:yyyyMMdd}";
+    public string CacheKey => $"{BuildingKey}|d{Date:yyyyMMdd}|{Metric}|p{From:yyyyMMdd}-{To:yyyyMMdd}";
 }
 
 internal sealed class GetBuildingDetailHandler(IAnalyticsStateProvider state, IBuildingReadRepository repo)
@@ -41,7 +43,7 @@ internal sealed class GetBuildingDetailHandler(IAnalyticsStateProvider state, IB
     public async Task<BuildingDetailDto> Handle(GetBuildingDetailQuery q, CancellationToken ct)
     {
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, MetricMode.Day);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.From, q.To);
         var building = await repo.GetBuildingAsync(q.BuildingKey, ct) ?? throw new NotFoundException("Building", q.BuildingKey);
         var slices = await repo.GetSlicesAsync(q.BuildingKey, ct);
         return BuildingAggregator.Build(building, slices, snap, day);
@@ -55,16 +57,22 @@ public static class BuildingAggregator
     {
         var w = snap.Window;
         var k = day.Column - 1;
+        var range = day.Metric == MetricMode.Window;
+        // the selected day, or the average day of the chosen range (one stored column per day of the window)
+        long DayE(BuildingSliceRow s) => range ? SumRange(s.E, day) : s.E[k];
+        long DayC(BuildingSliceRow s) => range ? SumRange(s.C, day) : s.C[k];
+        long RangeE(BuildingSliceRow s) => range ? SumRange(s.E, day) : s.EligTotal;
+        long RangeC(BuildingSliceRow s) => range ? SumRange(s.C, day) : s.CommTotal;
         long total = 0, expected = 0, success = 0, eligTotal = 0, commTotal = 0, allDay = 0, last7 = 0, dead = 0, intermittent = 0;
         var trendE = new long[w.Days];
         var trendC = new long[w.Days];
         foreach (var s in slices)
         {
             total += s.MeterCount;
-            expected += s.E[k];
-            success += s.C[k];
-            eligTotal += s.EligTotal;
-            commTotal += s.CommTotal;
+            expected += DayE(s);
+            success += DayC(s);
+            eligTotal += RangeE(s);
+            commTotal += RangeC(s);
             if (s.HealthClass == (byte)HealthClass.AllDay) allDay += s.MeterCount;
             if (s.HealthClass == (byte)HealthClass.Dead) dead += s.MeterCount;
             if (s.HealthClass == (byte)HealthClass.Intermittent) intermittent += s.MeterCount;
@@ -75,25 +83,32 @@ public static class BuildingAggregator
                 trendC[i] += s.C[i];
             }
         }
-        var failure = Math.Max(0, expected - success);
+        var counts = DayCounts.From(expected, success, day);
 
         IReadOnlyList<BreakdownDto> Breakdown(Func<BuildingSliceRow, short> key, Func<short, string> name) =>
             slices.GroupBy(key)
                   .Select(g =>
                   {
-                      long m = g.Sum(x => x.MeterCount), e = g.Sum(x => x.E[k]), c = g.Sum(x => x.C[k]);
-                      long et = g.Sum(x => x.EligTotal), ct = g.Sum(x => x.CommTotal);
-                      return new BreakdownDto(g.Key, name(g.Key), m, e, c, Math.Max(0, e - c), Pct.Of(c, e), Pct.Of(e - c, e), Pct.Of(ct, et));
+                      long m = g.Sum(x => x.MeterCount), et = g.Sum(RangeE), ct = g.Sum(RangeC);
+                      var n = DayCounts.From(g.Sum(DayE), g.Sum(DayC), day);
+                      return new BreakdownDto(g.Key, name(g.Key), m, n.Expected, n.Communicating, n.Failing, n.SuccessPct, n.FailurePct, Pct.Of(ct, et));
                   })
                   .OrderByDescending(x => x.Meters).ToList();
 
         return new BuildingDetailDto(
             b.BuildingKey, b.BuildingId, b.IsVirtual, b.Name, b.Address, b.ZoneId, snap.ZoneName(b.ZoneId), b.Lon, b.Lat,
-            total, day.Date, expected, success, failure, Pct.Of(success, expected), Pct.Of(failure, expected),
-            HealthBands.FromCounts(expected, failure), Pct.Of(commTotal, eligTotal),
-            new HealthCountsDto(allDay, last7, failure, dead, intermittent),
+            total, day.Date, counts.Expected, counts.Communicating, counts.Failing, counts.SuccessPct, counts.FailurePct,
+            counts.Band, Pct.Of(commTotal, eligTotal),
+            new HealthCountsDto(allDay, last7, counts.Failing, dead, intermittent),
             Breakdown(s => s.NspId, snap.NspName),
             Breakdown(s => s.ManufacturerId, snap.ManufacturerName),
             Dashboard.TrendBuilder.Build(w, trendE, trendC));
+    }
+
+    private static long SumRange(long[] perDay, DaySelection day)
+    {
+        long sum = 0;
+        for (var i = day.FromColumn - 1; i < day.ToColumn && i < perDay.Length; i++) sum += perDay[i];
+        return sum;
     }
 }

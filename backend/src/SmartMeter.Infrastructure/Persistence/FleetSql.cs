@@ -40,8 +40,20 @@ internal sealed class FleetSource
     public string C(DaySelection d) => MeterLevel ? $"(RIGHT_SHIFT({A}.CommMask, @bit) & 1)" : $"{A}.C{d.Column:00}";
     public string EligTotal => MeterLevel ? $"{A}.EligDays" : $"{A}.EligTotal";
     public string CommTotal => MeterLevel ? $"{A}.CommDays" : $"{A}.CommTotal";
-    public string MetricE(DaySelection d) => d.Metric == MetricMode.Window ? EligTotal : E(d);
-    public string MetricC(DaySelection d) => d.Metric == MetricMode.Window ? CommTotal : C(d);
+    public string MetricE(DaySelection d) => d.Metric == MetricMode.Window ? RangeE(d) : E(d);
+    public string MetricC(DaySelection d) => d.Metric == MetricMode.Window ? RangeC(d) : C(d);
+
+    /// <summary>Expected / communicating meter-days of the chosen range: the stored totals for the whole window, else the
+    /// day columns of the range summed (summary tables) or the range bits counted (meter level).</summary>
+    public string RangeE(DaySelection d) => d.IsFullWindow ? EligTotal : MeterLevel ? $"BIT_COUNT({A}.EligMask & @rmask)" : DaySum("E", d);
+    public string RangeC(DaySelection d) => d.IsFullWindow ? CommTotal : MeterLevel ? $"BIT_COUNT({A}.CommMask & @rmask)" : DaySum("C", d);
+
+    /// <summary>Window card: the chosen range in window mode, the whole window in day mode.</summary>
+    public string WindowE(DaySelection d) => d.Metric == MetricMode.Window ? RangeE(d) : EligTotal;
+    public string WindowC(DaySelection d) => d.Metric == MetricMode.Window ? RangeC(d) : CommTotal;
+
+    private string DaySum(string prefix, DaySelection d) =>
+        "(" + string.Join(" + ", Enumerable.Range(d.FromColumn, d.RangeDays).Select(k => $"CAST({A}.{prefix}{k:00} AS int)")) + ")";
 
     /// <summary>Health quick-filter as a row predicate. "Today Fail" is a metric switch handled by callers.</summary>
     public string Health(HealthFilter h) => h switch
@@ -56,9 +68,12 @@ internal sealed class FleetSource
     public static string Sum(string expr) => $"CAST(ISNULL(SUM(CAST({expr} AS bigint)), 0) AS bigint)";
 
     /// <summary>Day metric = counts on the day; Window metric = average daily counts over the window.</summary>
-    public static string SumMetric(string expr, DaySelection d) => d.Metric == MetricMode.Window
-        ? $"CAST(ISNULL(ROUND(SUM(CAST({expr} AS float)) / @days, 0), 0) AS bigint)"
-        : Sum(expr);
+    /// <remarks>
+    /// Window/range metric: the RAW meter-day totals of the range. Callers turn them into an average day for display
+    /// (<c>DayCounts</c>) but take percentages and colour bands from the raw totals, so small buildings are not distorted by
+    /// rounding (5 meters over 3 days: 11 of 15 meter-days = 73 %, not 4 of 5 = 80 %).
+    /// </remarks>
+    public static string SumMetric(string expr, DaySelection d) => Sum(expr);
 
     /// <summary>
     /// Appends dimension (and, on meter level, installation-date) predicates; with <paramref name="health"/> also the
@@ -81,7 +96,8 @@ internal sealed class FleetSource
     public static void AddDay(DynamicParameters p, DaySelection d, int windowDays)
     {
         p.Add("bit", d.Bit);
-        p.Add("days", (double)windowDays);
+        p.Add("days", (double)(d.Metric == MetricMode.Window ? d.RangeDays : windowDays));
+        p.Add("rmask", d.RangeMask);
     }
 }
 

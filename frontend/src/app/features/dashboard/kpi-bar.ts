@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { HealthFilter, KpiDto } from '../../core/api/models';
 import { FilterStore } from '../../core/state/filter.store';
 import { MetaStore } from '../../core/state/meta.store';
+import { PeriodStore } from '../../core/state/period';
 import { fmt, longDate, pct } from '../../core/ui/format';
 
 /** KPI stat tiles + health quick-filter chips. */
@@ -18,17 +19,17 @@ import { fmt, longDate, pct } from '../../core/ui/format';
       <div class="kpi">
         <span class="k">Communication success</span>
         <span class="v">{{ fmt(k()?.successCount) }} <small>{{ pct(k()?.successPct) }}</small></span>
-        <span class="s">{{ metricWindow() ? 'average daily, ' + (meta.window()?.days ?? 30) + ' days' : 'on the selected day' }}</span>
+        <span class="s">{{ metricWindow() ? 'average day, ' + periods.label() : 'on the selected day' }}</span>
       </div>
       <div class="kpi">
         <span class="k">Communication failure</span>
         <span class="v">{{ fmt(k()?.failureCount) }} <small>{{ pct(k()?.failurePct) }}</small></span>
-        <span class="s">{{ metricWindow() ? 'average daily' : 'meters not communicating' }}</span>
+        <span class="s">{{ metricWindow() ? 'average day, meters not communicating' : 'meters not communicating' }}</span>
       </div>
       <div class="kpi">
-        <span class="k">{{ meta.window()?.days ?? 30 }}-day average</span>
+        <span class="k">{{ metricWindow() && !periods.period()?.full ? 'Range average' : (meta.window()?.days ?? 30) + '-day average' }}</span>
         <span class="v">{{ pct(k()?.windowSuccessPct) }}</span>
-        <span class="s">{{ longDate(meta.window()?.start) }} – {{ longDate(meta.window()?.end) }}</span>
+        <span class="s">{{ metricWindow() ? periods.label() : longDate(meta.window()?.start) + ' – ' + longDate(meta.window()?.end) }}</span>
       </div>
     </div>
     <div class="chips" role="radiogroup" aria-label="Health quick filter">
@@ -53,6 +54,7 @@ export class KpiBar {
   protected readonly longDate = longDate;
   protected readonly k = computed(() => this.kpis());
   protected readonly metricWindow = computed(() => this.k()?.metric === 'window');
+  protected readonly periods = inject(PeriodStore);
 
   protected readonly chips = computed(() => {
     const h = this.k()?.health;

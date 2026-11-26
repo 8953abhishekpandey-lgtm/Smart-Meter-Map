@@ -24,3 +24,17 @@ button.secondary { height: 32px; border: 1px solid var(--border); border-radius:
   &.completed { background: #e3f4e3; color: #006300; } &.failed { background: #fbe4e4; color: #a32828; }
   &.parsing, &.merging, &.queued, &.uploading { background: #e2eefb; color: #1c5cab; } }
 @media (max-width: 900px) { .drops { grid-template-columns: 1fr; } }
+.watch { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+  h2 { margin: 0; font-size: 16px; }
+  .hint { font-size: 13px; color: var(--ink-secondary); margin: 8px 0; line-height: 1.5; }
+  .warn { font-size: 13px; color: #a32828; margin: 8px 0; }
+  code { font-size: 12px; background: var(--plane); padding: 1px 5px; border-radius: 4px; } }
+.watch-head { display: flex; align-items: center; gap: 12px;
+  .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; } }
+.counts { display: flex; gap: 18px; font-size: 13px; margin: 6px 0 10px;
+  .busy { color: #1c5cab; } .bad { color: #a32828; } .warn-text { color: #8a5a00; } }
+.grid.compact td, .grid.compact th { padding: 6px 8px; }
+.status.imported { background: #e3f4e3; color: #006300; }
+.status.waiting, .status.copying { background: #e2eefb; color: #1c5cab; }
+.status.unrecognised { background: #fdf1d8; color: #8a5a00; }
+button.link.more { margin-top: 8px; }

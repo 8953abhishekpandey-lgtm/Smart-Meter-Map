@@ -73,7 +73,7 @@ internal sealed class FindFailureClustersHandler(IAnalyticsStateProvider state, 
     {
         var sw = Stopwatch.StartNew();
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var rows = await repo.GetHotBuildingsAsync(q.Filter, day, q.MinFailurePct / 100.0, q.Bbox, FindFailureClustersQuery.MaxHotBuildings, ct);
         var (clusters, hot, truncated) = FailureClusterer.Cluster(rows, q, snap);
         return new FailureClustersDto(day.Date, day.Metric, hot, clusters.Count, truncated, sw.ElapsedMilliseconds, clusters.Take(q.Limit).ToList());

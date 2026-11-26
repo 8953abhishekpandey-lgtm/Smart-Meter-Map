@@ -4,6 +4,7 @@ import { debounceTime } from 'rxjs';
 import { Breakdown, MeterSort, MeterStatusFilter } from '../../core/api/models';
 import { SmartMeterApi, saveBlob } from '../../core/api/smart-meter-api';
 import { FilterStore } from '../../core/state/filter.store';
+import { PeriodStore } from '../../core/state/period';
 import { MetaStore } from '../../core/state/meta.store';
 import { BAND_COLORS, HEALTH_LABELS, compact, fmt, longDate, pct, shortDate } from '../../core/ui/format';
 import { BandBadge } from '../../shared/band-badge';
@@ -29,6 +30,8 @@ export class BuildingDetail {
   private readonly api = inject(SmartMeterApi);
   protected readonly store = inject(FilterStore);
   protected readonly meta = inject(MetaStore);
+  protected readonly periods = inject(PeriodStore);
+  protected readonly rangeMode = computed(() => this.store.metric() === 'window');
   protected readonly fmt = fmt;
   protected readonly compact = compact;
   protected readonly pct = pct;
@@ -49,8 +52,9 @@ export class BuildingDetail {
   protected readonly exporting = signal(false);
 
   protected readonly detail = rxResource({
-    params: () => ({ key: this.buildingKey(), date: this.store.date(), v: this.meta.dataVersion() }),
-    stream: ({ params }) => this.api.building(params.key, params.date),
+    params: () => ({ key: this.buildingKey(), date: this.store.date(), metric: this.store.metric(), from: this.store.rangeFrom(),
+      to: this.store.rangeTo(), v: this.meta.dataVersion() }),
+    stream: ({ params }) => this.api.building(params.key, params.date, params),
   });
 
   protected readonly meters = rxResource({

@@ -25,10 +25,14 @@ internal sealed class HangfireBackgroundJobs(IBackgroundJobClient client) : IBac
 
     public string EnqueueAnalyticsRefresh(DateTime? requestedAtUtc) =>
         client.Enqueue<AnalyticsRefreshJob>("analytics", j => j.RunAsync(requestedAtUtc, CancellationToken.None));
+
+    public string EnqueueFolderScan() =>
+        client.Enqueue<WatchFolderScanJob>("ingestion", j => j.ScanAsync(true, CancellationToken.None));
 }
 
 /// <summary>Registers recurring jobs (nightly safety-net refresh incl. retention) at start-up.</summary>
-internal sealed class RecurringJobsRegistrar(IRecurringJobManager manager, IOptions<JobsOptions> options, ILogger<RecurringJobsRegistrar> logger)
+internal sealed class RecurringJobsRegistrar(IRecurringJobManager manager, IOptions<JobsOptions> options,
+    IOptions<SmartMeter.Application.IngestionOptions> ingestion, ILogger<RecurringJobsRegistrar> logger)
     : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -39,6 +43,18 @@ internal sealed class RecurringJobsRegistrar(IRecurringJobManager manager, IOpti
         catch (Exception) { tz = TimeZoneInfo.Utc; logger.LogWarning("Time zone {TimeZone} not found; scheduling in UTC", o.TimeZone); }
         manager.AddOrUpdate<AnalyticsRefreshJob>("analytics-nightly-refresh", "analytics",
             j => j.RunAsync(null, CancellationToken.None), o.NightlyRefreshCron, new RecurringJobOptions { TimeZone = tz });
+
+        // watch folder: scan every N minutes for new or changed Excel/CSV files (Ingestion:WatchFolder)
+        var watch = ingestion.Value;
+        if (string.IsNullOrWhiteSpace(watch.WatchFolder))
+            manager.RemoveIfExists("watch-folder-scan");
+        else
+        {
+            var minutes = Math.Clamp(watch.WatchFolderScanMinutes, 1, 59);
+            manager.AddOrUpdate<WatchFolderScanJob>("watch-folder-scan", "ingestion",
+                j => j.ScanAsync(false, CancellationToken.None), $"*/{minutes} * * * *");
+            logger.LogInformation("Watching {Folder} for Excel/CSV files every {Minutes} min", watch.WatchFolder, minutes);
+        }
         return Task.CompletedTask;
     }
 

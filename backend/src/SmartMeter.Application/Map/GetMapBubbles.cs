@@ -67,15 +67,17 @@ internal sealed class GetMapBubblesHandler(IAnalyticsStateProvider state, IFleet
     public async Task<BubblesDto> Handle(GetMapBubblesQuery q, CancellationToken ct)
     {
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var level = MapResolution.ForZoom(q.Zoom, snap.GridLevels);
         var rows = await repo.GetBubblesAsync(q.Snapped, level, q.Filter, snap, day, q.Limit + 1, ct);
         var truncated = rows.Count > q.Limit;
 
         var bubbles = new List<BubbleDto>(Math.Min(rows.Count, q.Limit));
+        // "fail on selected day" always reads the selected day, never a range
+        var metricDay = q.Filter.Health == HealthFilter.TodayFail ? day with { Metric = MetricMode.Day } : day;
         foreach (var r in rows.Take(q.Limit))
         {
-            var failing = Math.Max(0, r.Expected - r.Communicating);
+            var counts = DayCounts.From(r.Expected, r.Communicating, metricDay);
             var isBuilding = level is null || r.BuildingKey is not null && r.CellX is null;
             string id;
             double[]? extent = null;
@@ -89,8 +91,8 @@ internal sealed class GetMapBubblesHandler(IAnalyticsStateProvider state, IFleet
                 id = r.BuildingKey ?? $"{r.Lon:F5},{r.Lat:F5}";
             }
             bubbles.Add(new BubbleDto(
-                id, isBuilding ? "building" : "cell", r.Lon, r.Lat, r.Meters, r.Expected, r.Communicating, failing,
-                Math.Round(HealthBands.FailurePct(r.Expected, failing), 1), HealthBands.FromCounts(r.Expected, failing),
+                id, isBuilding ? "building" : "cell", r.Lon, r.Lat, r.Meters, counts.Expected, counts.Communicating, counts.Failing,
+                Math.Round(counts.FailurePct, 1), counts.Band,
                 r.BuildingKey, r.Name, r.Address, extent));
         }
         return new BubblesDto(q.Zoom, level is null ? "building" : "grid", level?.Level, level?.CellDeg, day.Date, day.Metric, truncated, bubbles);

@@ -11,17 +11,17 @@
       <div class="tags">
         <span class="tag">{{ b.zone }}</span>
         <span class="tag">{{ b.isVirtual ? 'Virtual building (grid cell)' : 'Building ID ' + b.buildingId }}</span>
-        <span class="tag">Day {{ longDate(b.date) }}</span>
+        <span class="tag">{{ rangeMode() ? 'Average day, ' + periods.label() : 'Day ' + longDate(b.date) }}</span>
       </div>
     </div>
     <sm-band [band]="b.band" [failurePct]="b.failurePct" />
   </header>
 
   <section class="tiles">
-    <div class="tile"><span class="k">Total meters</span><span class="v">{{ fmt(b.totalMeters) }}</span><span class="s">{{ fmt(b.expected) }} expected on the day</span></div>
+    <div class="tile"><span class="k">Total meters</span><span class="v">{{ fmt(b.totalMeters) }}</span><span class="s">{{ fmt(b.expected) }} {{ rangeMode() ? 'expected per day (avg)' : 'expected on the day' }}</span></div>
     <div class="tile"><span class="k">Communicating</span><span class="v">{{ fmt(b.success) }}</span><span class="s">{{ pct(b.successPct) }} success</span></div>
     <div class="tile"><span class="k">Failing</span><span class="v">{{ fmt(b.failure) }}</span><span class="s">{{ pct(b.failurePct) }} failure</span></div>
-    <div class="tile"><span class="k">30-day average</span><span class="v">{{ pct(b.windowSuccessPct) }}</span><span class="s">daily success</span></div>
+    <div class="tile"><span class="k">{{ rangeMode() && !periods.period()?.full ? 'Range average' : '30-day average' }}</span><span class="v">{{ pct(b.windowSuccessPct) }}</span><span class="s">daily success</span></div>
   </section>
   <div class="health-row">
     <span><b>{{ fmt(b.health.allDay) }}</b> all-day</span>
@@ -40,7 +40,7 @@
     @case ('overview') {
       <h3>By network service provider</h3>
       <table class="grid">
-        <thead><tr><th>NSP</th><th class="num">Meters</th><th class="num">Comm / expected</th><th>Failure on day</th><th class="num">30-day avg</th></tr></thead>
+        <thead><tr><th>NSP</th><th class="num">Meters</th><th class="num">Comm / expected{{ rangeMode() ? ' (avg day)' : '' }}</th><th>{{ rangeMode() ? 'Failure in range' : 'Failure on day' }}</th><th class="num">{{ rangeMode() ? 'Range avg' : '30-day avg' }}</th></tr></thead>
         <tbody>
           @for (n of b.byNsp; track n.id) {
             <tr>
@@ -53,7 +53,7 @@
       </table>
       <h3>By manufacturer</h3>
       <table class="grid">
-        <thead><tr><th>Manufacturer</th><th class="num">Meters</th><th class="num">Comm / expected</th><th>Failure on day</th><th class="num">30-day avg</th></tr></thead>
+        <thead><tr><th>Manufacturer</th><th class="num">Meters</th><th class="num">Comm / expected{{ rangeMode() ? ' (avg day)' : '' }}</th><th>{{ rangeMode() ? 'Failure in range' : 'Failure on day' }}</th><th class="num">{{ rangeMode() ? 'Range avg' : '30-day avg' }}</th></tr></thead>
         <tbody>
           @for (n of b.byManufacturer; track n.id) {
             <tr>

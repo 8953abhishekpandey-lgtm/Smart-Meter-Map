@@ -120,6 +120,9 @@ public static class DependencyInjection
         }
         services.AddSingleton<IBackgroundJobs, HangfireBackgroundJobs>();
         services.AddTransient<IngestionJobRunner>();
+        services.AddSingleton<WatchFolderService>();
+        services.AddSingleton<SmartMeter.Application.Ingestion.IWatchFolder>(sp => sp.GetRequiredService<WatchFolderService>());
+        services.AddTransient<WatchFolderScanJob>();
         services.AddTransient<AnalyticsRefreshJob>();
         return services;
     }

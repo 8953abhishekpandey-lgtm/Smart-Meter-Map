@@ -38,6 +38,16 @@ public sealed class IngestionOptions
     public string[] AllowedExtensions { get; set; } = [".csv", ".txt", ".xlsx", ".xlsb", ".xls"];
     /// <summary>Optional service-area geofence for CIS coordinates (null = accept any valid WGS84 point).</summary>
     public ServiceAreaOptions? ServiceArea { get; set; }
+
+    /// <summary>
+    /// Folder the server watches for Excel/CSV files (empty = off). Absolute, or relative to the API's content root.
+    /// New and changed files are imported automatically, CIS before MDM, one at a time; the files are never moved or deleted.
+    /// </summary>
+    public string? WatchFolder { get; set; }
+    public int WatchFolderScanMinutes { get; set; } = 1;
+    /// <summary>A file must be unchanged for this long before it is read, so half-copied files are never imported.</summary>
+    public int WatchFolderStableSeconds { get; set; } = 20;
+    public bool WatchFolderIncludeSubfolders { get; set; } = true;
     /// <summary>Accepted textual date formats (Excel date cells are read natively).</summary>
     public string[] DateFormats { get; set; } =
         ["yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy", "yyyy/MM/dd", "dd.MM.yyyy", "dd-MMM-yyyy", "d-MMM-yy", "yyyyMMdd", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy HH:mm:ss"];

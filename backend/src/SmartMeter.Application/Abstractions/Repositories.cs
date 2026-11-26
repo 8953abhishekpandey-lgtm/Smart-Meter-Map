@@ -77,6 +77,8 @@ public interface IBackgroundJobs
     string EnqueueIngestion(Guid jobId);
     /// <param name="requestedAtUtc">Database time of the change; a refresh that started later already covers it (coalescing). Null = always run.</param>
     string EnqueueAnalyticsRefresh(DateTime? requestedAtUtc);
+    /// <summary>Scan the watch folder now, retrying files that failed before.</summary>
+    string EnqueueFolderScan();
 }
 
 /// <summary>Pushes live job progress / data-version changes to connected clients (SignalR).</summary>

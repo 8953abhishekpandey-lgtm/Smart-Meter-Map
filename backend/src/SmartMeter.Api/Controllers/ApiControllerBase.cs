@@ -28,6 +28,9 @@ public sealed class FleetQuery
     [FromQuery(Name = "health")] public HealthFilter Health { get; set; }
     [FromQuery(Name = "date")] public DateOnly? Date { get; set; }
     [FromQuery(Name = "metric")] public MetricMode Metric { get; set; }
+    /// <summary>Date range averaged when metric=window (defaults to the whole analytics window).</summary>
+    [FromQuery(Name = "from")] public DateOnly? From { get; set; }
+    [FromQuery(Name = "to")] public DateOnly? To { get; set; }
 
     public FleetFilter ToFilter() => new FleetFilter
     {
@@ -37,5 +40,7 @@ public sealed class FleetQuery
         InstalledFrom = InstalledFrom,
         InstalledTo = InstalledTo,
         Health = Health,
+        PeriodFrom = Metric == MetricMode.Window ? From : null,
+        PeriodTo = Metric == MetricMode.Window ? To : null,
     }.Normalize();
 }

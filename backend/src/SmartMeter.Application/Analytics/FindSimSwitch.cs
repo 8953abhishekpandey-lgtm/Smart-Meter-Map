@@ -61,7 +61,7 @@ internal sealed class FindSimSwitchHandler(IAnalyticsStateProvider state, IAnaly
     public async Task<PagedResult<SimSwitchDto>> Handle(FindSimSwitchQuery q, CancellationToken ct)
     {
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var rows = await repo.GetSimSwitchAsync(q.Filter, day, q.MinStrongSuccessPct / 100.0, q.MinWeakFailurePct / 100.0,
             q.MinMetersPerNsp, (q.Page - 1) * q.PageSize, q.PageSize, ct);
         var items = rows.Select(r =>

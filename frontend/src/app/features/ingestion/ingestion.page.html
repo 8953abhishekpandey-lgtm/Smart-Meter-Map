@@ -5,6 +5,58 @@
     <button type="button" class="secondary" (click)="refresh()" [disabled]="refreshing()">Refresh analytics now</button>
   </div>
 
+  @if (watch(); as w) {
+    <section class="watch">
+      <div class="watch-head">
+        <h2>Watch folder</h2>
+        @if (w.enabled) {
+          <code class="path" [title]="w.path">{{ w.path }}</code>
+          <button type="button" class="secondary" (click)="scan()" [disabled]="scanning()">Scan now</button>
+        }
+      </div>
+      @if (!w.enabled) {
+        <p class="hint">Off. Set <code>Ingestion:WatchFolder</code> in the API settings to a folder; every Excel / CSV file copied there is then
+          imported automatically, so daily files never need to be uploaded by hand.</p>
+      } @else {
+        @if (!w.exists) { <p class="warn">The folder does not exist or the API cannot read it. Create it, or fix <code>Ingestion:WatchFolder</code>.</p> }
+        <p class="hint">
+          Checked every {{ w.scanMinutes }} min · last scan {{ w.lastScanAt ? time(w.lastScanAt) : 'not yet' }}@if (w.lastScanMessage) { · {{ w.lastScanMessage }} }
+          <br />Put <b>cis</b> or <b>master</b> in the name (or folder) of customer-master files and <b>mdm</b>, <b>comm</b> or <b>log</b> in daily files.
+          A daily file may carry its day only in its name, e.g. <code>mdm_2026-11-20.xlsx</code> or <code>comm 20-11-2026.xlsx</code>.
+          Master files are imported first, then daily files in date order; a corrected file is imported again.
+        </p>
+        <div class="counts">
+          <span><b>{{ fmt(w.imported) }}</b> imported</span>
+          <span [class.busy]="w.waiting > 0"><b>{{ fmt(w.waiting) }}</b> waiting</span>
+          <span [class.bad]="w.failed > 0"><b>{{ fmt(w.failed) }}</b> failed</span>
+          <span [class.warn-text]="w.unrecognised > 0"><b>{{ fmt(w.unrecognised) }}</b> name not recognised</span>
+        </div>
+        @if (w.files.length) {
+          <table class="grid compact">
+            <thead><tr><th>File</th><th>Type</th><th>Day</th><th class="num">Size</th><th>State</th><th>Imported</th><th>Result</th></tr></thead>
+            <tbody>
+              @for (f of watchFiles(); track f.path) {
+                <tr>
+                  <td><b>{{ f.path }}</b></td>
+                  <td>{{ f.kind === 'cis' ? 'CIS master' : f.kind === 'mdm' ? 'MDM logs' : '—' }}</td>
+                  <td>{{ f.fileDate ?? '—' }}</td>
+                  <td class="num">{{ size(f.sizeBytes) }}</td>
+                  <td><span class="status" [class]="f.state">{{ stateLabel(f) }}</span></td>
+                  <td>{{ f.importedAt ? time(f.importedAt) : '—' }}</td>
+                  <td><span class="msg">{{ f.message }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          @if (w.files.length > 10) {
+            <button type="button" class="link more" (click)="showAllFiles.set(!showAllFiles())">
+              {{ showAllFiles() ? 'Show fewer' : 'Show all ' + w.files.length + ' files' }}</button>
+          }
+        }
+      }
+    </section>
+  }
+
   <div class="drops">
     @for (k of kinds; track k.kind) {
       <section class="drop" [class.over]="dragOver() === k.kind" (dragover)="$event.preventDefault(); dragOver.set(k.kind)"

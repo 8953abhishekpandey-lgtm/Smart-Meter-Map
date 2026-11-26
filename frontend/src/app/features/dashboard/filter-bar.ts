@@ -3,6 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { SmartMeterApi } from '../../core/api/smart-meter-api';
 import { FilterStore } from '../../core/state/filter.store';
 import { MetaStore } from '../../core/state/meta.store';
+import { PeriodStore } from '../../core/state/period';
 import { MultiSelect } from '../../shared/multi-select';
 import { MeterSearch } from './meter-search';
 
@@ -30,15 +31,31 @@ import { MeterSearch } from './meter-search';
         }
       </div>
 
-      <div class="field">
-        <span class="label">Date</span>
-        <input type="date" [min]="meta.window()?.start" [max]="meta.window()?.end" [value]="store.date() ?? meta.window()?.end ?? ''"
-               (change)="onDate($any($event.target).value)" aria-label="Selected date" />
-      </div>
+      @if (store.metric() === 'day') {
+        <div class="field">
+          <span class="label">Date</span>
+          <input type="date" [min]="meta.window()?.start" [max]="meta.window()?.end" [value]="store.date() ?? meta.window()?.end ?? ''"
+                 (change)="onDate($any($event.target).value)" aria-label="Selected date" />
+        </div>
+      } @else {
+        <div class="field range" [class.active]="!periods.period()?.full">
+          <span class="label">From</span>
+          <input type="date" [min]="meta.window()?.start" [max]="meta.window()?.end" [value]="periods.period()?.from ?? ''"
+                 (change)="onRange('from', $any($event.target).value)" aria-label="Range from" />
+          <span class="dash">–</span>
+          <input type="date" [min]="meta.window()?.start" [max]="meta.window()?.end" [value]="periods.period()?.to ?? ''"
+                 (change)="onRange('to', $any($event.target).value)" aria-label="Range to" />
+          <select (change)="rangePreset($any($event.target).value); $any($event.target).value = ''" aria-label="Quick range">
+            <option value="">Quick pick…</option><option value="1">Last day</option><option value="7">Last 7 days</option>
+            <option value="14">Last 14 days</option><option value="all">All {{ meta.window()?.days ?? 30 }} days</option>
+          </select>
+        </div>
+      }
 
       <div class="segmented" role="radiogroup" aria-label="Metric">
         <button type="button" role="radio" [attr.aria-checked]="store.metric() === 'day'" [class.on]="store.metric() === 'day'" (click)="store.metric.set('day')">Selected day</button>
-        <button type="button" role="radio" [attr.aria-checked]="store.metric() === 'window'" [class.on]="store.metric() === 'window'" (click)="store.metric.set('window')">{{ meta.window()?.days ?? 30 }}-day avg</button>
+        <button type="button" role="radio" [attr.aria-checked]="store.metric() === 'window'" [class.on]="store.metric() === 'window'" (click)="store.metric.set('window')"
+                title="Average day over a range of days: the daily files of every day in the range are combined">Date range</button>
       </div>
 
       @if (store.activeFilterCount() > 0) {
@@ -53,6 +70,7 @@ export class FilterBar {
   private readonly api = inject(SmartMeterApi);
   protected readonly store = inject(FilterStore);
   protected readonly meta = inject(MetaStore);
+  protected readonly periods = inject(PeriodStore);
 
   /** Each dimension's options are counted under the other dimensions' selections (cascading). */
   private readonly options = rxResource({
@@ -90,5 +108,26 @@ export class FilterBar {
   protected onDate(v: string): void {
     const w = this.meta.window();
     this.store.date.set(!v || v === w?.end ? null : v);
+  }
+
+  /** Sets one end of the range; keeps from <= to, and stores the whole window as "no range" (clean links). */
+  protected onRange(end: 'from' | 'to', value: string): void {
+    const w = this.meta.window();
+    const p = this.periods.period();
+    if (!w || !p || !value) return;
+    let from = end === 'from' ? value : p.from;
+    let to = end === 'to' ? value : p.to;
+    if (from > to) { if (end === 'from') to = from; else from = to; }
+    this.store.rangeFrom.set(from === w.start ? null : from);
+    this.store.rangeTo.set(to === w.end ? null : to);
+  }
+
+  protected rangePreset(v: string): void {
+    const w = this.meta.window();
+    if (!w || !v) return;
+    if (v === 'all') { this.store.rangeFrom.set(null); this.store.rangeTo.set(null); return; }
+    const from = new Date(Date.parse(w.end) - (Number(v) - 1) * 86_400_000).toISOString().slice(0, 10);
+    this.store.rangeFrom.set(from < w.start ? null : from);
+    this.store.rangeTo.set(null);
   }
 }

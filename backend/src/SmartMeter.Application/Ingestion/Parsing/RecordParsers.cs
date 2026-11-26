@@ -97,7 +97,9 @@ public static class CisRowParser
 /// <summary>Validates one MDM communication-log row.</summary>
 public static class MdmRowParser
 {
-    public static bool TryParse(IRowSource src, HeaderMap<MdmField> map, long rowNo, ErrorSink errors, out MdmRecord record)
+    /// <param name="fileDate">The day taken from the file name: used when the sheet has no LogDate column, or a row leaves it empty.</param>
+    public static bool TryParse(IRowSource src, HeaderMap<MdmField> map, long rowNo, ErrorSink errors, out MdmRecord record,
+        DateOnly? fileDate = null)
     {
         record = default;
         var ok = true;
@@ -108,7 +110,11 @@ public static class MdmRowParser
 
         var dOrd = map[MdmField.LogDate];
         DateOnly date = default;
-        if (dOrd >= src.FieldCount || src.IsEmpty(dOrd)) { errors.Add(rowNo, "LogDate", null, "LogDate is required."); ok = false; }
+        if (dOrd < 0 || dOrd >= src.FieldCount || src.IsEmpty(dOrd))
+        {
+            if (fileDate is { } fd) date = fd;
+            else { errors.Add(rowNo, "LogDate", null, "LogDate is required (or put the date in the file name, e.g. mdm_2026-11-20.xlsx)."); ok = false; }
+        }
         else if (!src.TryGetDate(dOrd, out date)) { errors.Add(rowNo, "LogDate", src.GetString(dOrd), "LogDate is not a valid date."); ok = false; }
 
         var cOrd = map[MdmField.IsCommunicating];

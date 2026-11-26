@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartMeter.Api.Infrastructure;
 using SmartMeter.Application.Abstractions;
 using SmartMeter.Application.Buildings;
+using SmartMeter.Domain.Analytics;
 using SmartMeter.Application.Common;
 
 namespace SmartMeter.Api.Controllers;
@@ -11,8 +12,10 @@ public sealed class BuildingsController : ApiControllerBase
 {
     /// <summary>Building drill-down: totals, NSP / manufacturer breakdowns and the 30-day trend.</summary>
     [HttpGet("{buildingKey}")]
-    public async Task<ActionResult<BuildingDetailDto>> Get(string buildingKey, [FromQuery] DateOnly? date, CancellationToken ct) =>
-        await Sender.Send(new GetBuildingDetailQuery(buildingKey, date), ct);
+    public async Task<ActionResult<BuildingDetailDto>> Get(string buildingKey, [FromQuery] DateOnly? date, [FromQuery] MetricMode metric,
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct) =>
+        await Sender.Send(new GetBuildingDetailQuery(buildingKey, date, metric,
+            metric == MetricMode.Window ? from : null, metric == MetricMode.Window ? to : null), ct);
 
     /// <summary>Server-side paginated, searchable meter list of a building.</summary>
     [HttpGet("{buildingKey}/meters")]

@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { AppConfigService } from '../config/app-config';
 import {
   BubblesDto, BuildingDetailDto, BuildingListItem, BuildingMeterDto, BuildingSort, ConsumptionSummaryDto, FailureClustersDto,
-  FilterOptionsDto, FleetQuery, IngestionJobDto, IngestionKind, KpiDto, MetaDto, MeterDetailDto, MeterSearchItem, MeterSort,
+  FilterOptionsDto, FleetQuery, IngestionJobDto, IngestionKind, WatchFolderStatusDto, KpiDto, MetaDto, MeterDetailDto, MeterSearchItem, MeterSort,
   MeterStatusFilter, MetricMode, PagedResult, PolygonStatsDto, SimSwitchDto, TrendDto, UploadSessionDto, ZoneSummaryDto,
 } from './models';
 
@@ -19,6 +19,8 @@ export function fleetParams(q: FleetQuery, extra: Record<string, string | number
   if (q.health !== 'all') p = p.set('health', q.health);
   if (q.date) p = p.set('date', q.date);
   if (q.metric !== 'day') p = p.set('metric', q.metric);
+  if (q.metric === 'window' && q.from) p = p.set('from', q.from);
+  if (q.metric === 'window' && q.to) p = p.set('to', q.to);
   for (const [k, v] of Object.entries(extra)) if (v !== null && v !== undefined && v !== '') p = p.set(k, String(v));
   return p;
 }
@@ -56,8 +58,16 @@ export class SmartMeterApi {
     });
   }
 
-  building(key: string, date: string | null): Observable<BuildingDetailDto> {
-    return this.http.get<BuildingDetailDto>(this.url(`/buildings/${encodeURIComponent(key)}`), { params: date ? { date } : {} });
+  /** One day, or (metric 'window') the average day of from..to. */
+  building(key: string, date: string | null, range?: { metric: MetricMode; from: string | null; to: string | null }): Observable<BuildingDetailDto> {
+    const params: Record<string, string> = {};
+    if (date) params['date'] = date;
+    if (range?.metric === 'window') {
+      params['metric'] = 'window';
+      if (range.from) params['from'] = range.from;
+      if (range.to) params['to'] = range.to;
+    }
+    return this.http.get<BuildingDetailDto>(this.url(`/buildings/${encodeURIComponent(key)}`), { params });
   }
 
   buildingMeters(key: string, o: { date: string | null; search?: string; status: MeterStatusFilter; sort: MeterSort; desc: boolean; page: number; pageSize: number }):
@@ -114,6 +124,10 @@ export class SmartMeterApi {
   jobErrors(jobId: string): Observable<Blob> { return this.http.get(this.url(`/ingestion/jobs/${jobId}/errors`), { responseType: 'blob' }); }
 
   template(kind: IngestionKind): Observable<Blob> { return this.http.get(this.url(`/ingestion/templates/${kind}`), { responseType: 'blob' }); }
+
+  watchFolder(): Observable<WatchFolderStatusDto> { return this.http.get<WatchFolderStatusDto>(this.url('/ingestion/watch-folder')); }
+
+  scanWatchFolder(): Observable<{ jobId: string }> { return this.http.post<{ jobId: string }>(this.url('/ingestion/watch-folder/scan'), {}); }
 
   refreshAnalytics(): Observable<{ jobId: string }> { return this.http.post<{ jobId: string }>(this.url('/admin/refresh'), {}); }
 }

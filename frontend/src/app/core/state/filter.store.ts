@@ -16,6 +16,9 @@ export class FilterStore {
   /** Selected day (null = newest day of the window). */
   readonly date = signal<string | null>(null);
   readonly metric = signal<MetricMode>('day');
+  /** Date range for the 'window' metric (null = the whole analytics window). */
+  readonly rangeFrom = signal<string | null>(null);
+  readonly rangeTo = signal<string | null>(null);
 
   readonly query = computed<FleetQuery>(
     () => ({
@@ -27,6 +30,8 @@ export class FilterStore {
       health: this.health(),
       date: this.date(),
       metric: this.metric(),
+      from: this.metric() === 'window' ? this.rangeFrom() : null,
+      to: this.metric() === 'window' ? this.rangeTo() : null,
     }),
     { equal: same },
   );
@@ -60,6 +65,8 @@ export class FilterStore {
       health: q.health === 'all' ? null : q.health,
       date: q.date,
       metric: q.metric === 'day' ? null : q.metric,
+      from: q.from,
+      to: q.to,
     };
   }
 
@@ -73,5 +80,7 @@ export class FilterStore {
     this.health.set((p['health'] as HealthFilter) ?? 'all');
     this.date.set(p['date'] ?? null);
     this.metric.set((p['metric'] as MetricMode) ?? 'day');
+    this.rangeFrom.set(p['from'] ?? null);
+    this.rangeTo.set(p['to'] ?? null);
   }
 }

@@ -17,7 +17,7 @@
   </div>
 
   <div class="overlay bottom-left legend">
-    <div class="legend-title">Failure rate on the selected day</div>
+    <div class="legend-title">{{ query().metric === 'window' ? 'Failure rate, average day of the range' : 'Failure rate on the selected day' }}</div>
     @for (b of bands; track b.band) {
       <div class="legend-row"><span class="dot" [style.background]="b.color"></span>{{ b.label }}</div>
     }

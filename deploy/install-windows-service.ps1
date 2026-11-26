@@ -12,6 +12,8 @@ $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($svc -and $svc.Status -ne "Stopped") { Stop-Service $ServiceName; $svc.WaitForStatus("Stopped", "00:01:00") }
 
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
+# default watch folder from the settings template: copy daily Excel/CSV files here and they are imported automatically
+New-Item -ItemType Directory -Force -Path "D:\SmartMeter\incoming" -ErrorAction SilentlyContinue | Out-Null
 # keep the server's own settings across upgrades: appsettings.Production.json and the SPA's wwwroot\config.json
 $spaConfig = Join-Path $Target "wwwroot\config.json"
 $savedSpaConfig = if (Test-Path $spaConfig) { Get-Content $spaConfig -Raw } else { $null }

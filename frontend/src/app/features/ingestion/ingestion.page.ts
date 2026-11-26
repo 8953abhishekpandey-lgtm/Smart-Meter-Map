@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, interval } from 'rxjs';
-import { IngestionJobDto, IngestionKind } from '../../core/api/models';
+import { IngestionJobDto, IngestionKind, WatchFolderFileDto, WatchFolderStatusDto } from '../../core/api/models';
 import { SmartMeterApi, saveBlob } from '../../core/api/smart-meter-api';
 import { LiveService } from '../../core/live/live.service';
 import { MetaStore } from '../../core/state/meta.store';
@@ -32,6 +32,15 @@ export class IngestionPage {
   protected readonly refreshing = signal(false);
   protected readonly anyActive = computed(() => this.jobs().some((j) => ACTIVE.has(j.status)));
 
+  // watch folder (server-side folder that is imported automatically)
+  protected readonly watch = signal<WatchFolderStatusDto | null>(null);
+  protected readonly scanning = signal(false);
+  protected readonly showAllFiles = signal(false);
+  protected readonly watchFiles = computed(() => {
+    const files = this.watch()?.files ?? [];
+    return this.showAllFiles() ? files : files.slice(0, 10);
+  });
+
   protected readonly kinds: { kind: IngestionKind; title: string; text: string; columns: string }[] = [
     { kind: 'cis', title: 'CIS customer master', text: 'Meter attributes and locations. Upsert by MeterId (last row wins).',
       columns: 'MeterId, BuildingId, Latitude, Longitude, Address, NSP, Manufacturer, Zone, InstallationDate, DtId' },
@@ -45,8 +54,31 @@ export class IngestionPage {
     destroyRef.onDestroy(() => void this.live.unwatchJobs());
     this.live.jobUpdates.pipe(takeUntilDestroyed()).subscribe((job) => this.upsert(job));
     void this.load();
+    void this.loadWatch();
     // polling fallback while anything is running (covers a dropped WebSocket)
     interval(4000).pipe(takeUntilDestroyed()).subscribe(() => { if (this.anyActive()) void this.load(); });
+    // the watch folder is scanned on the server every minute or so: keep its file list current
+    interval(10_000).pipe(takeUntilDestroyed()).subscribe(() => void this.loadWatch());
+  }
+
+  protected async loadWatch(): Promise<void> {
+    try { this.watch.set(await firstValueFrom(this.api.watchFolder())); } catch { /* operator role needed; the panel stays hidden */ }
+  }
+
+  protected scan(): void {
+    this.scanning.set(true);
+    this.api.scanWatchFolder().subscribe({
+      next: () => {
+        this.notifications.info('Folder scan started', 'New and changed files are imported one by one; jobs appear below.');
+        this.scanning.set(false);
+        setTimeout(() => void this.loadWatch(), 3000);
+      },
+      error: () => this.scanning.set(false),
+    });
+  }
+
+  protected stateLabel(f: WatchFolderFileDto): string {
+    return { waiting: 'Waiting', copying: 'Still copying', imported: 'Imported', failed: 'Failed', unrecognised: 'Name not recognised' }[f.state];
   }
 
   protected async load(): Promise<void> {

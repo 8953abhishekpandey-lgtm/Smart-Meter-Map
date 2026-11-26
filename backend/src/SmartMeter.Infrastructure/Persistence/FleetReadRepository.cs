@@ -24,8 +24,8 @@ internal sealed class FleetReadRepository(ISqlConnectionFactory db) : IFleetRead
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.Meters} END")} AS TotalMeters,
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.E(day)} END")} AS Expected,
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.C(day)} END")} AS Communicating,
-                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.EligTotal} END")} AS ExpectedWindow,
-                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.CommTotal} END")} AS CommunicatingWindow,
+                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.WindowE(day)} END")} AS ExpectedWindow,
+                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.WindowC(day)} END")} AS CommunicatingWindow,
                    {FleetSource.Sum($"CASE WHEN {a}.HealthClass = 2 THEN {src.Meters} END")} AS AllDay,
                    {FleetSource.Sum($"CASE WHEN {a}.ActiveLast7 = 1 THEN {src.Meters} END")} AS Last7,
                    {FleetSource.Sum($"CASE WHEN {a}.HealthClass = 0 THEN {src.Meters} END")} AS Dead,
@@ -188,6 +188,7 @@ internal sealed class FleetReadRepository(ISqlConnectionFactory db) : IFleetRead
         var src = FleetSource.Kpi(f);
         var p = new DynamicParameters();
         p.Add("bit", day.Bit);
+        p.Add("rmask", day.RangeMask);
         var hp = f.Health == HealthFilter.TodayFail ? "1 = 1" : src.Health(f.Health);
         var a = src.A;
         var inner = new StringBuilder($"""
@@ -195,8 +196,8 @@ internal sealed class FleetReadRepository(ISqlConnectionFactory db) : IFleetRead
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.Meters} END")} AS Meters,
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.E(day)} END")} AS Expected,
                    {FleetSource.Sum($"CASE WHEN {hp} THEN {src.C(day)} END")} AS Communicating,
-                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.EligTotal} END")} AS ExpectedWindow,
-                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.CommTotal} END")} AS CommunicatingWindow,
+                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.WindowE(day)} END")} AS ExpectedWindow,
+                   {FleetSource.Sum($"CASE WHEN {hp} THEN {src.WindowC(day)} END")} AS CommunicatingWindow,
                    {FleetSource.Sum($"CASE WHEN {a}.HealthClass = 2 THEN {src.Meters} END")} AS AllDay,
                    {FleetSource.Sum($"CASE WHEN {a}.ActiveLast7 = 1 THEN {src.Meters} END")} AS Last7,
                    {FleetSource.Sum($"CASE WHEN {a}.HealthClass = 0 THEN {src.Meters} END")} AS Dead,

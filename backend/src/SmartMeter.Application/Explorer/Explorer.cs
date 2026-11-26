@@ -23,16 +23,16 @@ internal sealed class GetZonesHandler(IAnalyticsStateProvider state, IFleetReadR
     public async Task<IReadOnlyList<ZoneSummaryDto>> Handle(GetZonesQuery q, CancellationToken ct)
     {
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var rows = await repo.GetZonesAsync(q.Filter, day, ct);
         return rows.Select(r =>
         {
-            long expected = day.Metric == MetricMode.Window ? (long)Math.Round(r.ExpectedWindow / (double)snap.Window.Days) : r.Expected;
-            long success = day.Metric == MetricMode.Window ? (long)Math.Round(r.CommunicatingWindow / (double)snap.Window.Days) : r.Communicating;
-            var failure = Math.Max(0, expected - success);
+            var n = day.Metric == MetricMode.Window
+                ? DayCounts.From(r.ExpectedWindow, r.CommunicatingWindow, day)
+                : DayCounts.From(r.Expected, r.Communicating, day);
             double[]? extent = r.MinLon is { } a && r.MinLat is { } b && r.MaxLon is { } c && r.MaxLat is { } d ? [a, b, c, d] : null;
-            return new ZoneSummaryDto(r.ZoneId, snap.ZoneName(r.ZoneId), r.Meters, r.BuildingCount, expected, success, failure,
-                Pct.Of(success, expected), Pct.Of(failure, expected), HealthBands.FromCounts(expected, failure),
+            return new ZoneSummaryDto(r.ZoneId, snap.ZoneName(r.ZoneId), r.Meters, r.BuildingCount, n.Expected, n.Communicating, n.Failing,
+                n.SuccessPct, n.FailurePct, n.Band,
                 new HealthCountsDto(r.AllDay, r.Last7, r.TodayFail, r.Dead, r.Intermittent), extent);
         }).OrderBy(z => z.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -68,13 +68,13 @@ internal sealed class GetZoneBuildingsHandler(IAnalyticsStateProvider state, IFl
     {
         var snap = await state.GetAsync(ct);
         if (!snap.Zones.ContainsKey(q.ZoneId)) throw new NotFoundException("Zone", q.ZoneId.ToString());
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var rows = await repo.GetZoneBuildingsAsync(q.ZoneId, q.Filter, day, q.Search, q.Sort, (q.Page - 1) * q.PageSize, q.PageSize, ct);
         var items = rows.Select(r =>
         {
-            var failure = Math.Max(0, r.Expected - r.Communicating);
-            return new BuildingListItemDto(r.BuildingKey, r.Name, r.Address, r.IsVirtual, r.Lon, r.Lat, r.Meters, r.Expected,
-                r.Communicating, failure, Pct.Of(failure, r.Expected), HealthBands.FromCounts(r.Expected, failure), r.NspCount);
+            var n = DayCounts.From(r.Expected, r.Communicating, day);
+            return new BuildingListItemDto(r.BuildingKey, r.Name, r.Address, r.IsVirtual, r.Lon, r.Lat, r.Meters, n.Expected,
+                n.Communicating, n.Failing, n.FailurePct, n.Band, r.NspCount);
         }).ToList();
         return new PagedResult<BuildingListItemDto>(items, q.Page, q.PageSize, rows.Count > 0 ? rows[0].TotalCount : 0);
     }

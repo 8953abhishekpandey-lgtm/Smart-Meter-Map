@@ -55,6 +55,16 @@ public sealed class IngestionController : ApiControllerBase
             Sender.CreateStream(new GetIngestionErrorsQuery(jobId), ct), e => [e.RowNo, e.Column, e.RawValue, e.Message], ct);
 
     /// <summary>Template file with the expected headers and two sample rows.</summary>
+    /// <summary>Watch folder: configured path, last scan and the state of every file in it.</summary>
+    [HttpGet("watch-folder")]
+    public async Task<ActionResult<WatchFolderStatusDto>> WatchFolder(CancellationToken ct) =>
+        await Sender.Send(new GetWatchFolderStatusQuery(), ct);
+
+    /// <summary>Scan the watch folder now (also retries files that failed).</summary>
+    [HttpPost("watch-folder/scan")]
+    public async Task<IActionResult> ScanWatchFolder(CancellationToken ct) =>
+        Accepted(new { jobId = await Sender.Send(new ScanWatchFolderCommand(), ct) });
+
     [HttpGet("templates/{kind}")]
     [AllowAnonymous]
     [Produces("text/csv")]

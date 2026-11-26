@@ -36,7 +36,7 @@ internal sealed class GetKpisHandler(IAnalyticsStateProvider state, IFleetReadRe
     public async Task<KpiDto> Handle(GetKpisQuery q, CancellationToken ct)
     {
         var snap = await state.GetAsync(ct);
-        var day = DaySelection.From(snap.Window, q.Date, q.Metric);
+        var day = DaySelection.From(snap.Window, q.Date, q.Metric, q.Filter);
         var r = await repo.GetKpisAsync(q.Filter, snap, day, ct);
         return Build(q.Filter, day, snap.Window.Days, r);
     }
@@ -53,20 +53,11 @@ internal sealed class GetKpisHandler(IAnalyticsStateProvider state, IFleetReadRe
                 r.TodayFail > 0 ? 100 : 0, null, health, r.AllMeters, source);
         }
 
-        long expected, success;
-        if (day.Metric == MetricMode.Window)
-        {
-            // average daily communication over the window
-            expected = (long)Math.Round(r.ExpectedWindow / (double)windowDays);
-            success = (long)Math.Round(r.CommunicatingWindow / (double)windowDays);
-        }
-        else
-        {
-            expected = r.Expected;
-            success = r.Communicating;
-        }
-        var failure = Math.Max(0, expected - success);
-        return new KpiDto(day.Date, day.Metric, r.TotalMeters, expected, success, Pct.Of(success, expected),
-            failure, Pct.Of(failure, expected), Pct.Of(r.CommunicatingWindow, r.ExpectedWindow), health, r.AllMeters, source);
+        // one day, or the average day of the chosen range; percentages from the raw meter-day totals
+        var n = day.Metric == MetricMode.Window
+            ? DayCounts.From(r.ExpectedWindow, r.CommunicatingWindow, day)
+            : DayCounts.From(r.Expected, r.Communicating, day);
+        return new KpiDto(day.Date, day.Metric, r.TotalMeters, n.Expected, n.Communicating, n.SuccessPct,
+            n.Failing, n.FailurePct, Pct.Of(r.CommunicatingWindow, r.ExpectedWindow), health, r.AllMeters, source);
     }
 }

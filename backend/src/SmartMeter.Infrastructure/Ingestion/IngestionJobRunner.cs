@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using SmartMeter.Application;
 using SmartMeter.Application.Abstractions;
 using SmartMeter.Application.Common;
+using SmartMeter.Application.Ingestion;
 using SmartMeter.Application.Ingestion.Parsing;
 using SmartMeter.Infrastructure.Persistence;
 
@@ -36,7 +37,10 @@ public sealed class IngestionJobRunner(
     [Queue("ingestion")]
     [AutomaticRetry(Attempts = 0, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
     [JobDisplayName("Ingest upload {0}")]
-    public async Task RunAsync(Guid jobId, CancellationToken ct)
+    public Task RunAsync(Guid jobId, CancellationToken ct) => RunCoreAsync(jobId, queueRefresh: true, ct);
+
+    /// <param name="queueRefresh">false when the caller (the watch folder) imports several files and refreshes once at the end.</param>
+    internal async Task RunCoreAsync(Guid jobId, bool queueRefresh, CancellationToken ct)
     {
         var job = await repo.GetJobAsync(jobId, ct) ?? throw new NotFoundException("Ingestion job", jobId.ToString());
         if (job.Status is IngestionStatus.Completed) return;          // idempotent re-delivery
@@ -77,10 +81,13 @@ public sealed class IngestionJobRunner(
             }
             else
             {
-                var map = ResolveHeaders(file.Headers(), ColumnAliases.Mdm, ColumnAliases.MdmRequired);
+                // a daily file named after its day (mdm_2026-11-20.xlsx, mdm/2026-11-20/…) needs no LogDate column
+                var fileDate = IngestionFileNames.DateOf(job.FileName);
+                var required = fileDate is null ? ColumnAliases.MdmRequired : ColumnAliases.MdmRequiredWithFileDate;
+                var map = ResolveHeaders(file.Headers(), ColumnAliases.Mdm, required);
                 using var reader = new ValidatingDataReader<MdmRecord>(file,
-                    headers => TryRemap(headers, ColumnAliases.Mdm, ColumnAliases.MdmRequired, errors, ref map),
-                    (IRowSource row, long rowNo, ErrorSink sink, out MdmRecord rec) => MdmRowParser.TryParse(row, map, rowNo, sink, out rec),
+                    headers => TryRemap(headers, ColumnAliases.Mdm, required, errors, ref map),
+                    (IRowSource row, long rowNo, ErrorSink sink, out MdmRecord rec) => MdmRowParser.TryParse(row, map, rowNo, sink, out rec, fileDate),
                     MdmValue, MdmColumns, MdmTypes, errors,
                     (read, valid) => progress.Update(read, valid, file.ProgressPct(read)));
                 await BulkCopyAsync(stage, reader, MdmColumns, o.BulkCopyBatchSize, ct);
@@ -92,10 +99,10 @@ public sealed class IngestionJobRunner(
                 await MergeMdmAsync(stage, progress, ct);
             }
 
-            var dbNow = await DbUtcNowAsync(ct);
-            jobs.EnqueueAnalyticsRefresh(dbNow);
+            if (queueRefresh) jobs.EnqueueAnalyticsRefresh(await DbUtcNowAsync(ct));
             progress.Phase(IngestionStatus.Completed,
-                $"Completed: {progress.Inserted:N0} inserted, {progress.Updated:N0} updated, {errors.RejectedRows + progress.ExtraRejected:N0} rejected. Analytics refresh queued.", 100);
+                $"Completed: {progress.Inserted:N0} inserted, {progress.Updated:N0} updated, {errors.RejectedRows + progress.ExtraRejected:N0} rejected. "
+                + (queueRefresh ? "Analytics refresh queued." : "Analytics refresh follows the folder scan."), 100);
             metrics.RecordIngestion(job.Kind, rowsValid - progress.ExtraRejected, errors.RejectedRows + progress.ExtraRejected);
             logger.LogInformation("Ingestion {JobId} completed: {Read} read, {Valid} valid, {Inserted} inserted, {Updated} updated",
                 jobId, progress.Read, progress.Valid, progress.Inserted, progress.Updated);

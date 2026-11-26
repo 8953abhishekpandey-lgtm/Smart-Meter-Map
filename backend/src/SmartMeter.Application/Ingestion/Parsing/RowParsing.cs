@@ -118,6 +118,9 @@ public static class ColumnAliases
     };
 
     public static readonly IReadOnlyCollection<MdmField> MdmRequired = [MdmField.MeterId, MdmField.LogDate, MdmField.IsCommunicating];
+
+    /// <summary>A daily file whose name carries the day (mdm_2026-11-20.xlsx) needs no LogDate column.</summary>
+    public static readonly IReadOnlyCollection<MdmField> MdmRequiredWithFileDate = [MdmField.MeterId, MdmField.IsCommunicating];
 }
 
 public static class ValueParsers
@@ -125,7 +128,8 @@ public static class ValueParsers
     private static readonly HashSet<string> TrueValues = new(StringComparer.OrdinalIgnoreCase)
         { "1", "true", "t", "yes", "y", "success", "successful", "communicating", "comm", "ok", "connected", "online", "pass" };
     private static readonly HashSet<string> FalseValues = new(StringComparer.OrdinalIgnoreCase)
-        { "0", "false", "f", "no", "n", "fail", "failed", "failure", "not communicating", "noncomm", "non-comm", "non comm", "nc", "disconnected", "offline" };
+        { "0", "false", "f", "no", "n", "fail", "failed", "failure", "not communicating", "not-communicating", "non communicating",
+          "non-communicating", "noncommunicating", "noncomm", "non-comm", "non comm", "nc", "disconnected", "offline" };
 
     public static bool TryParseBool(string? s, out bool value)
     {

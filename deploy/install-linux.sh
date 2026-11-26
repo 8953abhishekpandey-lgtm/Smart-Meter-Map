@@ -6,7 +6,7 @@ set -euo pipefail
 SRC="${1:?usage: install-linux.sh <release folder>}"
 APP=/opt/smartmeter/app
 id smartmeter >/dev/null 2>&1 || useradd --system --home /opt/smartmeter --shell /usr/sbin/nologin smartmeter
-mkdir -p "$APP" /var/smartmeter/uploads /etc/smartmeter
+mkdir -p "$APP" /var/smartmeter/uploads /var/smartmeter/incoming /etc/smartmeter
 systemctl stop smartmeter 2>/dev/null || true
 # replace the binaries but keep the server's own settings: appsettings.Production.json and wwwroot/config.json
 KEEP="$(mktemp -d)"
@@ -18,6 +18,7 @@ cp -a "$SRC/." "$APP/"
 cp -a "$KEEP/." "$APP/" && rm -rf "$KEEP"
 [[ -f "$APP/appsettings.Production.json" ]] || cp "$APP/appsettings.Production.template.json" "$APP/appsettings.Production.json"
 sed -i 's#D:\\\\SmartMeter\\\\uploads#/var/smartmeter/uploads#' "$APP/appsettings.Production.json"
+sed -i 's#D:\\\\SmartMeter\\\\incoming#/var/smartmeter/incoming#' "$APP/appsettings.Production.json"
 [[ -f /etc/smartmeter/smartmeter.env ]] || install -m 600 /dev/null /etc/smartmeter/smartmeter.env
 chown -R smartmeter:smartmeter /opt/smartmeter /var/smartmeter
 cp "$(dirname "$0")/smartmeter.service" /etc/systemd/system/smartmeter.service

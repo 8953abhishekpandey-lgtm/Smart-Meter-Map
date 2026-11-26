@@ -29,7 +29,7 @@ describe('FilterStore', () => {
   });
 
   it('serialises multi-selects as repeated keys and omits defaults', () => {
-    const p = fleetParams({ zones: [1, 2], nsps: [], mfrs: [3], installedFrom: '2026-01-01', installedTo: null, health: 'all', date: null, metric: 'day' },
+    const p = fleetParams({ zones: [1, 2], nsps: [], mfrs: [3], installedFrom: '2026-01-01', installedTo: null, health: 'all', date: null, metric: 'day', from: null, to: null },
       { zoom: 12, bbox: '' });
     expect(p.getAll('zone')).toEqual(['1', '2']);
     expect(p.getAll('mfr')).toEqual(['3']);
@@ -37,5 +37,21 @@ describe('FilterStore', () => {
     expect(p.has('metric')).toBe(false);
     expect(p.has('bbox')).toBe(false);
     expect(p.get('zoom')).toBe('12');
+  });
+
+  it('sends the date range only with the window metric, and round-trips it through the URL', () => {
+    const store = new FilterStore();
+    store.rangeFrom.set('2026-11-18');
+    store.rangeTo.set('2026-11-20');
+    expect(store.query().from).toBeNull();                       // day metric: range not part of the query
+    store.metric.set('window');
+    const p = fleetParams(store.query());
+    expect(p.get('metric')).toBe('window');
+    expect(p.get('from')).toBe('2026-11-18');
+    expect(p.get('to')).toBe('2026-11-20');
+
+    const other = new FilterStore();
+    other.fromParams(store.toParams());
+    expect(other.query()).toEqual(store.query());
   });
 });

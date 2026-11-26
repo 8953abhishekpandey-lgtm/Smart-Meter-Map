@@ -197,3 +197,28 @@ CREATE TABLE sm.IngestionError (
     INDEX CIX_IngestionError_Job CLUSTERED (JobId, RowNo)
 );
 GO
+
+/* ---------------------------------------------------------------- watch folder
+   One row per file seen in Ingestion:WatchFolder. A file is imported again only when its size or last-write time
+   changes; files are never moved or deleted. */
+IF OBJECT_ID(N'sm.FolderImport') IS NULL
+CREATE TABLE sm.FolderImport (
+    RelativePath nvarchar(400)    NOT NULL CONSTRAINT PK_FolderImport PRIMARY KEY,
+    Kind         varchar(8)       NOT NULL,
+    FileDate     date             NULL,
+    SizeBytes    bigint           NOT NULL,
+    LastWriteUtc datetime2(0)     NOT NULL,
+    Status       varchar(16)      NOT NULL CONSTRAINT CK_FolderImport_Status CHECK (Status IN ('imported', 'failed')),
+    JobId        uniqueidentifier NULL,
+    Message      nvarchar(400)    NULL,
+    ImportedAt   datetime2(0)     NOT NULL CONSTRAINT DF_FolderImport_ImportedAt DEFAULT (SYSUTCDATETIME())
+);
+GO
+IF OBJECT_ID(N'sm.FolderWatchState') IS NULL
+CREATE TABLE sm.FolderWatchState (
+    Id              tinyint       NOT NULL CONSTRAINT PK_FolderWatchState PRIMARY KEY CONSTRAINT CK_FolderWatchState_One CHECK (Id = 1),
+    FolderPath      nvarchar(400) NULL,
+    LastScanAt      datetime2(0)  NULL,
+    LastScanMessage nvarchar(400) NULL
+);
+GO

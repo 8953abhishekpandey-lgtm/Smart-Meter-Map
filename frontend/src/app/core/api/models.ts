@@ -17,6 +17,9 @@ export interface FleetQuery {
   health: HealthFilter;
   date: string | null;
   metric: MetricMode;
+  /** Date range averaged when metric = 'window' (null = start / end of the analytics window). */
+  from: string | null;
+  to: string | null;
 }
 
 export interface DimensionItem { id: number; name: string; }
@@ -307,3 +310,31 @@ export interface IngestionJobDto {
 export interface UploadSessionDto { jobId: string; chunkSize: number; chunkCount: number; }
 
 export interface AuthConfigDto { enabled: boolean; mode: 'None' | 'Dev' | 'Oidc'; authority?: string; clientId?: string; scope?: string; audience?: string; }
+
+export type WatchFileState = 'waiting' | 'copying' | 'imported' | 'failed' | 'unrecognised';
+
+export interface WatchFolderFileDto {
+  path: string;
+  kind?: IngestionKind | null;
+  fileDate?: string | null;
+  sizeBytes: number;
+  lastWriteUtc: string;
+  state: WatchFileState;
+  jobId?: string | null;
+  importedAt?: string | null;
+  message?: string | null;
+}
+
+export interface WatchFolderStatusDto {
+  enabled: boolean;
+  path?: string | null;
+  exists: boolean;
+  scanMinutes: number;
+  lastScanAt?: string | null;
+  lastScanMessage?: string | null;
+  waiting: number;
+  imported: number;
+  failed: number;
+  unrecognised: number;
+  files: WatchFolderFileDto[];
+}
